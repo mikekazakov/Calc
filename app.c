@@ -23,6 +23,8 @@ struct objc_object { Class isa; };
 typedef struct objc_object *id;
 
 static bool (*class_addMethod)(Class cls, SEL name, IMP  imp, const char *types);
+static void *(*objc_autoreleasePoolPush)();
+static void (*objc_autoreleasePoolPop)(void *ctxt);
 static Class (*objc_getClass)(const char *name);
 static Class (*objc_allocateClassPair)(Class superclass, const char *name, u64 extraBytes);
 static void (*objc_registerClassPair)(Class cls);
@@ -106,12 +108,26 @@ static SEL $string;
 static SEL $stringWithCharacters$length$;
 static SEL $stringWithUTF8String$;
 static SEL $terminate$;
+static SEL $activateIgnoringOtherApps$;
 
 // Program state
 static id g_App; // NSApplication
 static id g_AppDelegate; // AppDelegate
 static id g_MainMenu; // NSMenu
 static id g_Window; // NSWindow
+
+// Forward declarations
+static void retain(id obj);
+static void release(id obj);
+static void *LoadLibraryOrDie(const char * path);
+static void *LoadSymbolorDie(void *handle, const char * symbol);
+static void LoadLibraries();
+static void RegisterSelectors();
+static void onApplicationDidFinishLaunching(id self, SEL cmd, id notification);
+static void InitializeAppDelegate();
+static void InitializeApplication();
+static void InitializeMainMenu();
+static void InitializeWindow();
 
 static void retain(id obj) {
     MSG(void, obj, $retain);
@@ -121,15 +137,15 @@ static void release(id obj) {
     MSG(void, obj, $release);
 }
 
-static void * LoadLibraryOrDie(const char * path) {
+static void *LoadLibraryOrDie(const char * path) {
     void * handle = dlopen(path, 2);
     if (handle == 0)
         abort();
     return handle;
 }
 
-static void * LoadSymbolorDie(void *handle, const char * symbol) {
-    void * ret = dlsym(handle, symbol);
+static void *LoadSymbolorDie(void *handle, const char * symbol) {
+    void *ret = dlsym(handle, symbol);
     if (ret == 0)
         abort();
     return ret;
@@ -140,6 +156,8 @@ static void LoadLibraries()
     ObjCRuntime = LoadLibraryOrDie("/usr/lib/libobjc.A.dylib");
     FoundationFramework = LoadLibraryOrDie("/System/Library/Frameworks/Foundation.framework/Foundation");
     AppKitFramework = LoadLibraryOrDie("/System/Library/Frameworks/AppKit.framework/AppKit");
+    objc_autoreleasePoolPush = LoadSymbolorDie(ObjCRuntime, "objc_autoreleasePoolPush");
+    objc_autoreleasePoolPop = LoadSymbolorDie(ObjCRuntime, "objc_autoreleasePoolPop");
     objc_getClass = LoadSymbolorDie(ObjCRuntime, "objc_getClass");
     objc_allocateClassPair = LoadSymbolorDie(ObjCRuntime, "objc_allocateClassPair");
     class_addMethod = LoadSymbolorDie(ObjCRuntime, "class_addMethod");
@@ -181,10 +199,12 @@ static void RegisterSelectors() {
     $stringWithCharacters$length$ = sel_registerName("stringWithCharacters:length:");
     $stringWithUTF8String$ = sel_registerName("stringWithUTF8String:");
     $terminate$ = sel_registerName("terminate:");
+    $activateIgnoringOtherApps$ = sel_registerName("activateIgnoringOtherApps:");
 }
 
 static void onApplicationDidFinishLaunching(id self, SEL cmd, id notification) {
-    printf("Hello!\n");
+    InitializeWindow();
+    MSG(void, g_App, $activateIgnoringOtherApps$, true);
 }
 
 static void InitializeAppDelegate() {
@@ -214,8 +234,6 @@ static void InitializeMainMenu() {
         app_menu_quit = MSG(id, app_menu_quit, $initWithTitle$action$keyEquivalent$, app_menu_quit_title, $terminate$, app_menu_quit_key_equivalent);
         MSG(void, app_menu, $addItem$, app_menu_quit);
         release(app_menu_quit);
-        release(app_menu_quit_key_equivalent);
-        release(app_menu_quit_title);
     }
 
     MSG(void, app_menu_item, $setSubmenu$, app_menu);
@@ -237,8 +255,6 @@ static void InitializeWindow() {
         id dark_aqua_name = CLASS_MSG(id, NSString, $stringWithUTF8String$, "NSAppearanceNameDarkAqua");
         id dark_aqua_appearance = CLASS_MSG(id, NSAppearance, $appearanceNamed$, dark_aqua_name);
         MSG(void, g_Window, $setAppearance$, dark_aqua_appearance);
-        release(dark_aqua_appearance);
-        release(dark_aqua_name);
     }
 
     MSG(void, g_Window, $makeKeyAndOrderFront$, (id)0);
@@ -247,10 +263,10 @@ static void InitializeWindow() {
 int main() {
     LoadLibraries();
     RegisterSelectors();
-    CLASS_MSG(id, NSAutoreleasePool, $new);
+    void *autorelease_pool = objc_autoreleasePoolPush();
     InitializeAppDelegate();
     InitializeApplication();
     InitializeMainMenu();
-    InitializeWindow();
     MSG(void, g_App, $run);
+    objc_autoreleasePoolPop(autorelease_pool);
 }
