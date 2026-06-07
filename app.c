@@ -77,6 +77,7 @@ typedef CGRect NSRect;
 static Class NSAppearance;
 static Class NSApplication;
 static Class NSAutoreleasePool;
+static Class NSButton;
 static Class NSMenu;
 static Class NSMenuItem;
 static Class NSObject;
@@ -109,12 +110,18 @@ static SEL $stringWithCharacters$length$;
 static SEL $stringWithUTF8String$;
 static SEL $terminate$;
 static SEL $activateIgnoringOtherApps$;
+static SEL $buttonWithTitle$target$action$;
+static SEL $buttonWithTitle$image$target$action$;
+static SEL $onButtonEqClicked$;
+static SEL $addSubview$;
+static SEL $contentView;
 
 // Program state
 static id g_App; // NSApplication
 static id g_AppDelegate; // AppDelegate
 static id g_MainMenu; // NSMenu
 static id g_Window; // NSWindow
+static id g_ButtonEq; // NSButton
 
 // Forward declarations
 static void retain(id obj);
@@ -167,6 +174,7 @@ static void LoadLibraries()
     NSAppearance = objc_getClass("NSAppearance");
     NSApplication = objc_getClass("NSApplication");
     NSAutoreleasePool = objc_getClass("NSAutoreleasePool");
+    NSButton = objc_getClass("NSButton");
     NSMenu = objc_getClass("NSMenu");
     NSMenuItem = objc_getClass("NSMenuItem");
     NSObject = objc_getClass("NSObject");
@@ -200,6 +208,11 @@ static void RegisterSelectors() {
     $stringWithUTF8String$ = sel_registerName("stringWithUTF8String:");
     $terminate$ = sel_registerName("terminate:");
     $activateIgnoringOtherApps$ = sel_registerName("activateIgnoringOtherApps:");
+    $buttonWithTitle$target$action$ = sel_registerName("buttonWithTitle:target:action:");
+    $buttonWithTitle$image$target$action$ = sel_registerName("buttonWithTitle:image:target:action:");
+    $onButtonEqClicked$ = sel_registerName("onButtonEqClicked:");
+    $addSubview$ = sel_registerName("addSubview:");
+    $contentView = sel_registerName("contentView");
 }
 
 static void onApplicationDidFinishLaunching(id self, SEL cmd, id notification) {
@@ -207,9 +220,14 @@ static void onApplicationDidFinishLaunching(id self, SEL cmd, id notification) {
     MSG(void, g_App, $activateIgnoringOtherApps$, true);
 }
 
+static void onButtonEqClicked(id self, SEL cmd, id sender) {
+    printf("onButtonEqClicked\n");
+}
+
 static void InitializeAppDelegate() {
     Class class = objc_allocateClassPair(NSObject, "AppDelegate", 0);
     class_addMethod(class, $applicationDidFinishLaunching$, (IMP)onApplicationDidFinishLaunching,"v@:@");
+    class_addMethod(class, $onButtonEqClicked$, (IMP)onButtonEqClicked,"v@:@");
     objc_registerClassPair(class);
     g_AppDelegate = CLASS_MSG(id, class, $new);
 }
@@ -256,6 +274,13 @@ static void InitializeWindow() {
         id dark_aqua_appearance = CLASS_MSG(id, NSAppearance, $appearanceNamed$, dark_aqua_name);
         MSG(void, g_Window, $setAppearance$, dark_aqua_appearance);
     }
+
+    id content_view = MSG(id, g_Window, $contentView);
+
+    id str = CLASS_MSG(id, NSString, $stringWithUTF8String$, "=");
+    g_ButtonEq = CLASS_MSG(id, NSButton, $buttonWithTitle$target$action$, str, g_AppDelegate, $onButtonEqClicked$);
+
+    MSG(void, content_view, $addSubview$, g_ButtonEq);
 
     MSG(void, g_Window, $makeKeyAndOrderFront$, (id)0);
 }
