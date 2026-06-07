@@ -93,6 +93,7 @@ static SEL $setAppearance$;
 static SEL $setMainMenu$;
 static SEL $setSubmenu$;
 static SEL $setTitle$;
+static SEL $setTitlebarAppearsTransparent$;
 static SEL $sharedApplication;
 static SEL $string;
 static SEL $stringWithCharacters$length$;
@@ -160,6 +161,7 @@ static void RegisterSelectors() {
     $setMainMenu$ = sel_registerName("setMainMenu:");
     $setSubmenu$ = sel_registerName("setSubmenu:");
     $setTitle$ = sel_registerName("setTitle:");
+    $setTitlebarAppearsTransparent$ = sel_registerName("setTitlebarAppearsTransparent:");
     $sharedApplication = sel_registerName("sharedApplication");
     $string = sel_registerName("string");
     $stringWithCharacters$length$ = sel_registerName("stringWithCharacters:length:");
@@ -199,13 +201,11 @@ static void InitializeMainMenu() {
 }
 
 static void InitializeWindow() {
-    const u16 *str_test = (u16*)u"Hello, world!";
-    id str = CLASS_MSG(id, NSString, $stringWithCharacters$length$, str_test, (u64)13);
-
     g_Window = CLASS_MSG(id, NSWindow, $alloc);
     NSRect rc = {.origin = {.x = 200, .y = 200}, .size = { .width = 200, .height = 200 }};
-    g_Window = MSG(id, g_Window, $initWithContentRect$styleMask$backing$defer$, rc, (u64)0b1111, (u64)2, false);
-    MSG(void, g_Window, $setTitle$, str);
+    u64 windows_flags = (1 << 15) | (1 << 2) | (1 << 1) | (1 << 0);
+    g_Window = MSG(id, g_Window, $initWithContentRect$styleMask$backing$defer$, rc, windows_flags, (u64)2, false);
+    MSG(void, g_Window, $setTitlebarAppearsTransparent$, true);
 
     {
         // Switch to Dark Aqua appearance
