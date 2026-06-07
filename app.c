@@ -8,20 +8,24 @@ typedef long i64;
 typedef unsigned long u64;
 typedef float f32;
 typedef double f64;
-typedef enum: u8 {false=0, true=1} bool;
 
 // POSIX
 extern void * dlopen(const char * path, i32 mode);
 extern void * dlsym(void * handle, const char * symbol);
 extern void abort();
+extern int printf( const char* restrict format, ... );
 
 // Objective-C runtime
 typedef struct objc_selector *SEL;
 typedef struct objc_class *Class;
+typedef void (*IMP)(void /* id, SEL, ... */ );
 struct objc_object { Class isa; };
 typedef struct objc_object *id;
 
+static bool (*class_addMethod)(Class cls, SEL name, IMP  imp, const char *types);
 static Class (*objc_getClass)(const char *name);
+static Class (*objc_allocateClassPair)(Class superclass, const char *name, u64 extraBytes);
+static void (*objc_registerClassPair)(Class cls);
 static id (*objc_msgSend)(id self, SEL op, ...);
 static SEL (*sel_registerName)(const char *str);
 
@@ -73,6 +77,7 @@ static Class NSApplication;
 static Class NSAutoreleasePool;
 static Class NSMenu;
 static Class NSMenuItem;
+static Class NSObject;
 static Class NSString;
 static Class NSWindow;
 
@@ -80,6 +85,7 @@ static Class NSWindow;
 static SEL $addItem$;
 static SEL $alloc;
 static SEL $appearanceNamed$;
+static SEL $applicationDidFinishLaunching$;
 static SEL $initWithContentRect$styleMask$backing$defer$;
 static SEL $initWithTitle$action$keyEquivalent$;
 static SEL $length;
@@ -90,6 +96,7 @@ static SEL $retain;
 static SEL $run;
 static SEL $setActivationPolicy$;
 static SEL $setAppearance$;
+static SEL $setDelegate$;
 static SEL $setMainMenu$;
 static SEL $setSubmenu$;
 static SEL $setTitle$;
@@ -102,6 +109,7 @@ static SEL $terminate$;
 
 // Program state
 static id g_App; // NSApplication
+static id g_AppDelegate; // AppDelegate
 static id g_MainMenu; // NSMenu
 static id g_Window; // NSWindow
 
@@ -133,13 +141,17 @@ static void LoadLibraries()
     FoundationFramework = LoadLibraryOrDie("/System/Library/Frameworks/Foundation.framework/Foundation");
     AppKitFramework = LoadLibraryOrDie("/System/Library/Frameworks/AppKit.framework/AppKit");
     objc_getClass = LoadSymbolorDie(ObjCRuntime, "objc_getClass");
+    objc_allocateClassPair = LoadSymbolorDie(ObjCRuntime, "objc_allocateClassPair");
+    class_addMethod = LoadSymbolorDie(ObjCRuntime, "class_addMethod");
     objc_msgSend = LoadSymbolorDie(ObjCRuntime, "objc_msgSend");
+    objc_registerClassPair = LoadSymbolorDie(ObjCRuntime, "objc_registerClassPair");
     sel_registerName = LoadSymbolorDie(ObjCRuntime, "sel_registerName");
     NSAppearance = objc_getClass("NSAppearance");
     NSApplication = objc_getClass("NSApplication");
     NSAutoreleasePool = objc_getClass("NSAutoreleasePool");
     NSMenu = objc_getClass("NSMenu");
     NSMenuItem = objc_getClass("NSMenuItem");
+    NSObject = objc_getClass("NSObject");
     NSString = objc_getClass("NSString");
     NSWindow = objc_getClass("NSWindow");
 }
@@ -148,6 +160,7 @@ static void RegisterSelectors() {
     $addItem$ = sel_registerName("addItem:");
     $alloc = sel_registerName("alloc");
     $appearanceNamed$ = sel_registerName("appearanceNamed:");
+    $applicationDidFinishLaunching$ = sel_registerName("applicationDidFinishLaunching:");
     $initWithContentRect$styleMask$backing$defer$ = sel_registerName("initWithContentRect:styleMask:backing:defer:");
     $initWithTitle$action$keyEquivalent$ = sel_registerName("initWithTitle:action:keyEquivalent:");
     $length = sel_registerName("length");
@@ -158,6 +171,7 @@ static void RegisterSelectors() {
     $run = sel_registerName("run");
     $setActivationPolicy$ = sel_registerName("setActivationPolicy:");
     $setAppearance$ = sel_registerName("setAppearance:");
+    $setDelegate$ = sel_registerName("setDelegate:");
     $setMainMenu$ = sel_registerName("setMainMenu:");
     $setSubmenu$ = sel_registerName("setSubmenu:");
     $setTitle$ = sel_registerName("setTitle:");
@@ -169,9 +183,20 @@ static void RegisterSelectors() {
     $terminate$ = sel_registerName("terminate:");
 }
 
+static void onApplicationDidFinishLaunching(id self, SEL cmd, id notification) {
+    printf("Hello!\n");
+}
+
+static void InitializeAppDelegate() {
+    Class class = objc_allocateClassPair(NSObject, "AppDelegate", 0);
+    class_addMethod(class, $applicationDidFinishLaunching$, (IMP)onApplicationDidFinishLaunching,"v@:@");
+    objc_registerClassPair(class);
+    g_AppDelegate = CLASS_MSG(id, class, $new);
+}
+
 static void InitializeApplication() {
-    CLASS_MSG(id, NSAutoreleasePool, $new);
     g_App = CLASS_MSG(id, NSApplication, $sharedApplication);
+    MSG(void, g_App, $setDelegate$, g_AppDelegate);
     MSG(bool, g_App, $setActivationPolicy$, (i64)0);
 }
 
@@ -222,6 +247,8 @@ static void InitializeWindow() {
 int main() {
     LoadLibraries();
     RegisterSelectors();
+    CLASS_MSG(id, NSAutoreleasePool, $new);
+    InitializeAppDelegate();
     InitializeApplication();
     InitializeMainMenu();
     InitializeWindow();
