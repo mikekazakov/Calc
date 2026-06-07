@@ -68,6 +68,7 @@ typedef struct CGRect CGRect;
 typedef CGRect NSRect;
 
 // Imported Objective C classes
+static Class NSAppearance;
 static Class NSApplication;
 static Class NSAutoreleasePool;
 static Class NSMenu;
@@ -78,6 +79,7 @@ static Class NSWindow;
 // Objective C selectors
 static SEL $addItem$;
 static SEL $alloc;
+static SEL $appearanceNamed$;
 static SEL $initWithContentRect$styleMask$backing$defer$;
 static SEL $initWithTitle$action$keyEquivalent$;
 static SEL $length;
@@ -87,6 +89,7 @@ static SEL $release;
 static SEL $retain;
 static SEL $run;
 static SEL $setActivationPolicy$;
+static SEL $setAppearance$;
 static SEL $setMainMenu$;
 static SEL $setSubmenu$;
 static SEL $setTitle$;
@@ -99,6 +102,7 @@ static SEL $terminate$;
 // Program state
 static id g_App; // NSApplication
 static id g_MainMenu; // NSMenu
+static id g_Window; // NSWindow
 
 static void retain(id obj) {
     MSG(void, obj, $retain);
@@ -130,6 +134,7 @@ static void LoadLibraries()
     objc_getClass = LoadSymbolorDie(ObjCRuntime, "objc_getClass");
     objc_msgSend = LoadSymbolorDie(ObjCRuntime, "objc_msgSend");
     sel_registerName = LoadSymbolorDie(ObjCRuntime, "sel_registerName");
+    NSAppearance = objc_getClass("NSAppearance");
     NSApplication = objc_getClass("NSApplication");
     NSAutoreleasePool = objc_getClass("NSAutoreleasePool");
     NSMenu = objc_getClass("NSMenu");
@@ -141,6 +146,7 @@ static void LoadLibraries()
 static void RegisterSelectors() {
     $addItem$ = sel_registerName("addItem:");
     $alloc = sel_registerName("alloc");
+    $appearanceNamed$ = sel_registerName("appearanceNamed:");
     $initWithContentRect$styleMask$backing$defer$ = sel_registerName("initWithContentRect:styleMask:backing:defer:");
     $initWithTitle$action$keyEquivalent$ = sel_registerName("initWithTitle:action:keyEquivalent:");
     $length = sel_registerName("length");
@@ -150,6 +156,7 @@ static void RegisterSelectors() {
     $retain = sel_registerName("retain");
     $run = sel_registerName("run");
     $setActivationPolicy$ = sel_registerName("setActivationPolicy:");
+    $setAppearance$ = sel_registerName("setAppearance:");
     $setMainMenu$ = sel_registerName("setMainMenu:");
     $setSubmenu$ = sel_registerName("setSubmenu:");
     $setTitle$ = sel_registerName("setTitle:");
@@ -161,6 +168,7 @@ static void RegisterSelectors() {
 }
 
 static void InitializeApplication() {
+    CLASS_MSG(id, NSAutoreleasePool, $new);
     g_App = CLASS_MSG(id, NSApplication, $sharedApplication);
     MSG(bool, g_App, $setActivationPolicy$, (i64)0);
 }
@@ -190,23 +198,32 @@ static void InitializeMainMenu() {
     release(app_menu_item);
 }
 
-int main() {
-    LoadLibraries();
-    RegisterSelectors();
-
-    id pool = CLASS_MSG(id, NSAutoreleasePool, $new);
-
-    InitializeApplication();
-    InitializeMainMenu();
-
+static void InitializeWindow() {
     const u16 *str_test = (u16*)u"Hello, world!";
     id str = CLASS_MSG(id, NSString, $stringWithCharacters$length$, str_test, (u64)13);
 
-    id window = CLASS_MSG(id, NSWindow, $alloc);
+    g_Window = CLASS_MSG(id, NSWindow, $alloc);
     NSRect rc = {.origin = {.x = 200, .y = 200}, .size = { .width = 200, .height = 200 }};
-    window = MSG(id, window, $initWithContentRect$styleMask$backing$defer$, rc, (u64)0b1111, (u64)2, false);
-    MSG(void, window, $setTitle$, str);
-    MSG(void, window, $makeKeyAndOrderFront$, (id)0);
+    g_Window = MSG(id, g_Window, $initWithContentRect$styleMask$backing$defer$, rc, (u64)0b1111, (u64)2, false);
+    MSG(void, g_Window, $setTitle$, str);
 
+    {
+        // Switch to Dark Aqua appearance
+        id dark_aqua_name = CLASS_MSG(id, NSString, $stringWithUTF8String$, "NSAppearanceNameDarkAqua");
+        id dark_aqua_appearance = CLASS_MSG(id, NSAppearance, $appearanceNamed$, dark_aqua_name);
+        MSG(void, g_Window, $setAppearance$, dark_aqua_appearance);
+        release(dark_aqua_appearance);
+        release(dark_aqua_name);
+    }
+
+    MSG(void, g_Window, $makeKeyAndOrderFront$, (id)0);
+}
+
+int main() {
+    LoadLibraries();
+    RegisterSelectors();
+    InitializeApplication();
+    InitializeMainMenu();
+    InitializeWindow();
     MSG(void, g_App, $run);
 }
