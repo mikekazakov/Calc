@@ -1,3 +1,5 @@
+typedef signed char i8;
+typedef unsigned char u8;
 typedef short i16;
 typedef unsigned short u16;
 typedef int i32;
@@ -6,6 +8,7 @@ typedef long i64;
 typedef unsigned long u64;
 typedef float f32;
 typedef double f64;
+typedef enum: u8 {false=0, true=1} bool;
 
 // POSIX
 extern void * dlopen(const char * path, i32 mode);
@@ -21,9 +24,7 @@ typedef struct objc_object *id;
 static Class (*objc_getClass)(const char *name);
 static id (*objc_msgSend)(id self, SEL op, ...);
 static SEL (*sel_registerName)(const char *str);
-static Class NSApplication;
-static Class NSString;
-static Class NSWindow;
+
 static void *ObjCRuntime;
 static void *FoundationFramework;
 static void *AppKitFramework;
@@ -66,19 +67,46 @@ struct CGRect {
 typedef struct CGRect CGRect;
 typedef CGRect NSRect;
 
-// Selectors
+// Imported Objective C classes
+static Class NSApplication;
+static Class NSAutoreleasePool;
+static Class NSMenu;
+static Class NSMenuItem;
+static Class NSString;
+static Class NSWindow;
+
+// Objective C selectors
+static SEL $addItem$;
 static SEL $alloc;
 static SEL $initWithContentRect$styleMask$backing$defer$;
+static SEL $initWithTitle$action$keyEquivalent$;
 static SEL $length;
 static SEL $makeKeyAndOrderFront$;
+static SEL $new;
 static SEL $release;
 static SEL $retain;
 static SEL $run;
+static SEL $setActivationPolicy$;
+static SEL $setMainMenu$;
+static SEL $setSubmenu$;
 static SEL $setTitle$;
 static SEL $sharedApplication;
 static SEL $string;
 static SEL $stringWithCharacters$length$;
 static SEL $stringWithUTF8String$;
+static SEL $terminate$;
+
+// Program state
+static id g_App; // NSApplication
+static id g_MainMenu; // NSMenu
+
+static void retain(id obj) {
+    MSG(void, obj, $retain);
+}
+
+static void release(id obj) {
+    MSG(void, obj, $release);
+}
 
 static void * LoadLibraryOrDie(const char * path) {
     void * handle = dlopen(path, 2);
@@ -103,38 +131,82 @@ static void LoadLibraries()
     objc_msgSend = LoadSymbolorDie(ObjCRuntime, "objc_msgSend");
     sel_registerName = LoadSymbolorDie(ObjCRuntime, "sel_registerName");
     NSApplication = objc_getClass("NSApplication");
+    NSAutoreleasePool = objc_getClass("NSAutoreleasePool");
+    NSMenu = objc_getClass("NSMenu");
+    NSMenuItem = objc_getClass("NSMenuItem");
     NSString = objc_getClass("NSString");
     NSWindow = objc_getClass("NSWindow");
 }
 
 static void RegisterSelectors() {
+    $addItem$ = sel_registerName("addItem:");
     $alloc = sel_registerName("alloc");
     $initWithContentRect$styleMask$backing$defer$ = sel_registerName("initWithContentRect:styleMask:backing:defer:");
+    $initWithTitle$action$keyEquivalent$ = sel_registerName("initWithTitle:action:keyEquivalent:");
     $length = sel_registerName("length");
     $makeKeyAndOrderFront$ = sel_registerName("makeKeyAndOrderFront:");
+    $new = sel_registerName("new");
     $release = sel_registerName("release");
     $retain = sel_registerName("retain");
     $run = sel_registerName("run");
+    $setActivationPolicy$ = sel_registerName("setActivationPolicy:");
+    $setMainMenu$ = sel_registerName("setMainMenu:");
+    $setSubmenu$ = sel_registerName("setSubmenu:");
     $setTitle$ = sel_registerName("setTitle:");
     $sharedApplication = sel_registerName("sharedApplication");
     $string = sel_registerName("string");
     $stringWithCharacters$length$ = sel_registerName("stringWithCharacters:length:");
     $stringWithUTF8String$ = sel_registerName("stringWithUTF8String:");
+    $terminate$ = sel_registerName("terminate:");
+}
+
+static void InitializeApplication() {
+    g_App = CLASS_MSG(id, NSApplication, $sharedApplication);
+    MSG(bool, g_App, $setActivationPolicy$, (i64)0);
+}
+
+static void InitializeMainMenu() {
+    g_MainMenu = CLASS_MSG(id, NSMenu, $new);
+
+    id app_menu_item = CLASS_MSG(id, NSMenuItem, $new);
+    MSG(void, g_MainMenu, $addItem$, app_menu_item);
+
+    id app_menu = CLASS_MSG(id, NSMenu, $new);
+    {
+        id app_menu_quit_title = CLASS_MSG(id, NSString, $stringWithUTF8String$, "Quit Calc");
+        id app_menu_quit_key_equivalent = CLASS_MSG(id, NSString, $stringWithUTF8String$, "q");
+        id app_menu_quit = CLASS_MSG(id, NSMenuItem, $alloc);
+        app_menu_quit = MSG(id, app_menu_quit, $initWithTitle$action$keyEquivalent$, app_menu_quit_title, $terminate$, app_menu_quit_key_equivalent);
+        MSG(void, app_menu, $addItem$, app_menu_quit);
+        release(app_menu_quit);
+        release(app_menu_quit_key_equivalent);
+        release(app_menu_quit_title);
+    }
+
+    MSG(void, app_menu_item, $setSubmenu$, app_menu);
+
+    MSG(void, g_App, $setMainMenu$, g_MainMenu);
+    release(app_menu);
+    release(app_menu_item);
 }
 
 int main() {
     LoadLibraries();
     RegisterSelectors();
 
+    id pool = CLASS_MSG(id, NSAutoreleasePool, $new);
+
+    InitializeApplication();
+    InitializeMainMenu();
+
     const u16 *str_test = (u16*)u"Hello, world!";
     id str = CLASS_MSG(id, NSString, $stringWithCharacters$length$, str_test, (u64)13);
 
-    id sharedApplication = CLASS_MSG(id, NSApplication, $sharedApplication);
     id window = CLASS_MSG(id, NSWindow, $alloc);
     NSRect rc = {.origin = {.x = 200, .y = 200}, .size = { .width = 200, .height = 200 }};
-    window = MSG(id, window, $initWithContentRect$styleMask$backing$defer$, rc, (u64)0b1111, (u64)2, false );
-    MSG(void, window, $setTitle$, str );
-    MSG(void, window, $makeKeyAndOrderFront$, (id)0 );
+    window = MSG(id, window, $initWithContentRect$styleMask$backing$defer$, rc, (u64)0b1111, (u64)2, false);
+    MSG(void, window, $setTitle$, str);
+    MSG(void, window, $makeKeyAndOrderFront$, (id)0);
 
-    MSG(void, sharedApplication, $run);
+    MSG(void, g_App, $run);
 }
