@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 4.2)
-project(Calc)
 set(CMAKE_C_STANDARD 23)
+set(CMAKE_C_VISIBILITY_PRESET hidden)
+project(Calc LANGUAGES C)
 add_executable(Calc app.c)

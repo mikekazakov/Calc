@@ -113,9 +113,25 @@ static SEL $leadingAnchor;
 static SEL $length;
 static SEL $makeKeyAndOrderFront$;
 static SEL $new;
+static SEL $onButtonClearClicked$;
+static SEL $onButtonDeleteClicked$;
+static SEL $onButtonDivideClicked$;
 static SEL $onButtonDotClicked$;
+static SEL $onButtonEightClicked$;
 static SEL $onButtonEqClicked$;
+static SEL $onButtonFiveClicked$;
+static SEL $onButtonFourClicked$;
+static SEL $onButtonMinusClicked$;
+static SEL $onButtonMultiplyClicked$;
+static SEL $onButtonNineClicked$;
+static SEL $onButtonOneClicked$;
+static SEL $onButtonPercentClicked$;
+static SEL $onButtonPlusClicked$;
 static SEL $onButtonPlusMinusClicked$;
+static SEL $onButtonSevenClicked$;
+static SEL $onButtonSixClicked$;
+static SEL $onButtonThreeClicked$;
+static SEL $onButtonTwoClicked$;
 static SEL $onButtonZeroClicked$;
 static SEL $release;
 static SEL $retain;
@@ -147,6 +163,22 @@ static id g_App;              // NSApplication
 static id g_AppDelegate;      // AppDelegate
 static id g_MainMenu;         // NSMenu
 static id g_Window;           // NSWindow
+static id g_ButtonDelete;     // NSButton
+static id g_ButtonClear;      // NSButton
+static id g_ButtonPercent;    // NSButton
+static id g_ButtonDivide;     // NSButton
+static id g_ButtonSeven;      // NSButton
+static id g_ButtonEight;      // NSButton
+static id g_ButtonNine;       // NSButton
+static id g_ButtonMultiply;   // NSButton
+static id g_ButtonFour;       // NSButton
+static id g_ButtonFive;       // NSButton
+static id g_ButtonSix;        // NSButton
+static id g_ButtonMinus;      // NSButton
+static id g_ButtonOne;        // NSButton
+static id g_ButtonTwo;        // NSButton
+static id g_ButtonThree;      // NSButton
+static id g_ButtonPlus;       // NSButton
 static id g_ButtonPlusMinus;  // NSButton
 static id g_ButtonZero;       // NSButton
 static id g_ButtonDot;        // NSButton
@@ -246,9 +278,25 @@ static void RegisterSelectors() {
   REGISTER($length);
   REGISTER($makeKeyAndOrderFront$);
   REGISTER($new);
+  REGISTER($onButtonClearClicked$);
+  REGISTER($onButtonDeleteClicked$);
+  REGISTER($onButtonDivideClicked$);
   REGISTER($onButtonDotClicked$);
+  REGISTER($onButtonEightClicked$);
   REGISTER($onButtonEqClicked$);
+  REGISTER($onButtonFiveClicked$);
+  REGISTER($onButtonFourClicked$);
+  REGISTER($onButtonMinusClicked$);
+  REGISTER($onButtonMultiplyClicked$);
+  REGISTER($onButtonNineClicked$);
+  REGISTER($onButtonOneClicked$);
+  REGISTER($onButtonPercentClicked$);
+  REGISTER($onButtonPlusClicked$);
   REGISTER($onButtonPlusMinusClicked$);
+  REGISTER($onButtonSevenClicked$);
+  REGISTER($onButtonSixClicked$);
+  REGISTER($onButtonThreeClicked$);
+  REGISTER($onButtonTwoClicked$);
   REGISTER($onButtonZeroClicked$);
   REGISTER($release);
   REGISTER($retain);
@@ -282,6 +330,70 @@ static void onApplicationDidFinishLaunching(id self, SEL cmd, id notification) {
   MSG(void, g_App, $activateIgnoringOtherApps$, true);
 }
 
+static void onButtonDeleteClicked(id self, SEL cmd, id sender) {
+  printf("onButtonDeleteClicked\n");
+}
+
+static void onButtonClearClicked(id self, SEL cmd, id sender) {
+  printf("onButtonClearClicked\n");
+}
+
+static void onButtonPercentClicked(id self, SEL cmd, id sender) {
+  printf("onButtonPercentClicked\n");
+}
+
+static void onButtonDivideClicked(id self, SEL cmd, id sender) {
+  printf("onButtonDivideClicked\n");
+}
+
+static void onButtonSevenClicked(id self, SEL cmd, id sender) {
+  printf("onButtonSevenClicked\n");
+}
+
+static void onButtonEightClicked(id self, SEL cmd, id sender) {
+  printf("onButtonEightClicked\n");
+}
+
+static void onButtonNineClicked(id self, SEL cmd, id sender) {
+  printf("onButtonNineClicked\n");
+}
+
+static void onButtonMultiplyClicked(id self, SEL cmd, id sender) {
+  printf("onButtonMultiplyClicked\n");
+}
+
+static void onButtonFourClicked(id self, SEL cmd, id sender) {
+  printf("onButtonFourClicked\n");
+}
+
+static void onButtonFiveClicked(id self, SEL cmd, id sender) {
+  printf("onButtonFiveClicked\n");
+}
+
+static void onButtonSixClicked(id self, SEL cmd, id sender) {
+  printf("onButtonSixClicked\n");
+}
+
+static void onButtonMinusClicked(id self, SEL cmd, id sender) {
+  printf("onButtonMinusClicked\n");
+}
+
+static void onButtonOneClicked(id self, SEL cmd, id sender) {
+  printf("onButtonOneClicked\n");
+}
+
+static void onButtonTwoClicked(id self, SEL cmd, id sender) {
+  printf("onButtonTwoClicked\n");
+}
+
+static void onButtonThreeClicked(id self, SEL cmd, id sender) {
+  printf("onButtonThreeClicked\n");
+}
+
+static void onButtonPlusClicked(id self, SEL cmd, id sender) {
+  printf("onButtonPlusClicked\n");
+}
+
 static void onButtonPlusMinusClicked(id self, SEL cmd, id sender) {
   printf("onButtonPlusMinusClicked\n");
 }
@@ -301,6 +413,22 @@ static void onButtonEqClicked(id self, SEL cmd, id sender) {
 static void InitializeAppDelegate() {
   Class class = objc_allocateClassPair(NSObject, "AppDelegate", 0);
   class_addMethod(class, $applicationDidFinishLaunching$, (IMP)onApplicationDidFinishLaunching, "v@:@");
+  class_addMethod(class, $onButtonDeleteClicked$, (IMP)onButtonDeleteClicked, "v@:@");
+  class_addMethod(class, $onButtonClearClicked$, (IMP)onButtonClearClicked, "v@:@");
+  class_addMethod(class, $onButtonPercentClicked$, (IMP)onButtonPercentClicked, "v@:@");
+  class_addMethod(class, $onButtonDivideClicked$, (IMP)onButtonDivideClicked, "v@:@");
+  class_addMethod(class, $onButtonSevenClicked$, (IMP)onButtonSevenClicked, "v@:@");
+  class_addMethod(class, $onButtonEightClicked$, (IMP)onButtonEightClicked, "v@:@");
+  class_addMethod(class, $onButtonNineClicked$, (IMP)onButtonNineClicked, "v@:@");
+  class_addMethod(class, $onButtonMultiplyClicked$, (IMP)onButtonMultiplyClicked, "v@:@");
+  class_addMethod(class, $onButtonFourClicked$, (IMP)onButtonFourClicked, "v@:@");
+  class_addMethod(class, $onButtonFiveClicked$, (IMP)onButtonFiveClicked, "v@:@");
+  class_addMethod(class, $onButtonSixClicked$, (IMP)onButtonSixClicked, "v@:@");
+  class_addMethod(class, $onButtonMinusClicked$, (IMP)onButtonMinusClicked, "v@:@");
+  class_addMethod(class, $onButtonOneClicked$, (IMP)onButtonOneClicked, "v@:@");
+  class_addMethod(class, $onButtonTwoClicked$, (IMP)onButtonTwoClicked, "v@:@");
+  class_addMethod(class, $onButtonThreeClicked$, (IMP)onButtonThreeClicked, "v@:@");
+  class_addMethod(class, $onButtonPlusClicked$, (IMP)onButtonPlusClicked, "v@:@");
   class_addMethod(class, $onButtonEqClicked$, (IMP)onButtonEqClicked, "v@:@");
   class_addMethod(class, $onButtonPlusMinusClicked$, (IMP)onButtonPlusMinusClicked, "v@:@");
   class_addMethod(class, $onButtonZeroClicked$, (IMP)onButtonZeroClicked, "v@:@");
@@ -385,6 +513,54 @@ static void InitializeWindow() {
   id cv_trail_anch = MSG(id, cv, $trailingAnchor);
   id cv_bott_anch = MSG(id, cv, $bottomAnchor);
 
+  id delete_gl = nullptr;
+  AddButton(&g_ButtonDelete, &delete_gl, cv, "<", $onButtonDeleteClicked$);
+
+  id clear_gl = nullptr;
+  AddButton(&g_ButtonClear, &clear_gl, cv, "C", $onButtonClearClicked$);
+
+  id percent_gl = nullptr;
+  AddButton(&g_ButtonPercent, &percent_gl, cv, "%", $onButtonPercentClicked$);
+
+  id divide_gl = nullptr;
+  AddButton(&g_ButtonDivide, &divide_gl, cv, "/", $onButtonDivideClicked$);
+
+  id seven_gl = nullptr;
+  AddButton(&g_ButtonSeven, &seven_gl, cv, "7", $onButtonSevenClicked$);
+
+  id eight_gl = nullptr;
+  AddButton(&g_ButtonEight, &eight_gl, cv, "8", $onButtonEightClicked$);
+
+  id nine_gl = nullptr;
+  AddButton(&g_ButtonNine, &nine_gl, cv, "9", $onButtonNineClicked$);
+
+  id multiply_gl = nullptr;
+  AddButton(&g_ButtonMultiply, &multiply_gl, cv, "x", $onButtonMultiplyClicked$);
+
+  id four_gl = nullptr;
+  AddButton(&g_ButtonFour, &four_gl, cv, "4", $onButtonFourClicked$);
+
+  id five_gl = nullptr;
+  AddButton(&g_ButtonFive, &five_gl, cv, "5", $onButtonFiveClicked$);
+
+  id six_gl = nullptr;
+  AddButton(&g_ButtonSix, &six_gl, cv, "6", $onButtonSixClicked$);
+
+  id minus_gl = nullptr;
+  AddButton(&g_ButtonMinus, &minus_gl, cv, "-", $onButtonMinusClicked$);
+
+  id one_gl = nullptr;
+  AddButton(&g_ButtonOne, &one_gl, cv, "1", $onButtonOneClicked$);
+
+  id two_gl = nullptr;
+  AddButton(&g_ButtonTwo, &two_gl, cv, "2", $onButtonTwoClicked$);
+
+  id three_gl = nullptr;
+  AddButton(&g_ButtonThree, &three_gl, cv, "3", $onButtonThreeClicked$);
+
+  id plus_gl = nullptr;
+  AddButton(&g_ButtonPlus, &plus_gl, cv, "+", $onButtonPlusClicked$);
+
   id plus_minus_gl = nullptr;
   AddButton(&g_ButtonPlusMinus, &plus_minus_gl, cv, "+-", $onButtonPlusMinusClicked$);
 
@@ -396,6 +572,39 @@ static void InitializeWindow() {
 
   id eq_gl = nullptr;
   AddButton(&g_ButtonEq, &eq_gl, cv, "=", $onButtonEqClicked$);
+
+  MSG(void, MSG(id, MSG(id, delete_gl, $centerXAnchor), $constraintEqualToAnchor$, MSG(id, plus_minus_gl, $centerXAnchor)), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, MSG(id, delete_gl, $bottomAnchor), $anchorWithOffsetToAnchor$, MSG(id, seven_gl, $topAnchor)), $constraintEqualToConstant$, 6.), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, MSG(id, delete_gl, $trailingAnchor), $anchorWithOffsetToAnchor$, MSG(id, clear_gl, $leadingAnchor)), $constraintEqualToConstant$, 6.), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, clear_gl, $centerYAnchor), $constraintEqualToAnchor$, MSG(id, delete_gl, $centerYAnchor)), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, MSG(id, clear_gl, $trailingAnchor), $anchorWithOffsetToAnchor$, MSG(id, percent_gl, $leadingAnchor)), $constraintEqualToConstant$, 6.), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, percent_gl, $centerYAnchor), $constraintEqualToAnchor$, MSG(id, delete_gl, $centerYAnchor)), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, MSG(id, percent_gl, $trailingAnchor), $anchorWithOffsetToAnchor$, MSG(id, divide_gl, $leadingAnchor)), $constraintEqualToConstant$, 6.), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, divide_gl, $centerYAnchor), $constraintEqualToAnchor$, MSG(id, delete_gl, $centerYAnchor)), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, seven_gl, $centerXAnchor), $constraintEqualToAnchor$, MSG(id, plus_minus_gl, $centerXAnchor)), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, MSG(id, seven_gl, $bottomAnchor), $anchorWithOffsetToAnchor$, MSG(id, four_gl, $topAnchor)), $constraintEqualToConstant$, 6.), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, MSG(id, seven_gl, $trailingAnchor), $anchorWithOffsetToAnchor$, MSG(id, eight_gl, $leadingAnchor)), $constraintEqualToConstant$, 6.), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, eight_gl, $centerYAnchor), $constraintEqualToAnchor$, MSG(id, seven_gl, $centerYAnchor)), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, MSG(id, eight_gl, $trailingAnchor), $anchorWithOffsetToAnchor$, MSG(id, nine_gl, $leadingAnchor)), $constraintEqualToConstant$, 6.), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, nine_gl, $centerYAnchor), $constraintEqualToAnchor$, MSG(id, seven_gl, $centerYAnchor)), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, MSG(id, nine_gl, $trailingAnchor), $anchorWithOffsetToAnchor$, MSG(id, multiply_gl, $leadingAnchor)), $constraintEqualToConstant$, 6.), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, multiply_gl, $centerYAnchor), $constraintEqualToAnchor$, MSG(id, seven_gl, $centerYAnchor)), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, four_gl, $centerXAnchor), $constraintEqualToAnchor$, MSG(id, plus_minus_gl, $centerXAnchor)), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, MSG(id, four_gl, $bottomAnchor), $anchorWithOffsetToAnchor$, MSG(id, one_gl, $topAnchor)), $constraintEqualToConstant$, 6.), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, MSG(id, four_gl, $trailingAnchor), $anchorWithOffsetToAnchor$, MSG(id, five_gl, $leadingAnchor)), $constraintEqualToConstant$, 6.), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, five_gl, $centerYAnchor), $constraintEqualToAnchor$, MSG(id, four_gl, $centerYAnchor)), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, MSG(id, five_gl, $trailingAnchor), $anchorWithOffsetToAnchor$, MSG(id, six_gl, $leadingAnchor)), $constraintEqualToConstant$, 6.), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, six_gl, $centerYAnchor), $constraintEqualToAnchor$, MSG(id, four_gl, $centerYAnchor)), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, MSG(id, six_gl, $trailingAnchor), $anchorWithOffsetToAnchor$, MSG(id, minus_gl, $leadingAnchor)), $constraintEqualToConstant$, 6.), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, minus_gl, $centerYAnchor), $constraintEqualToAnchor$, MSG(id, four_gl, $centerYAnchor)), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, one_gl, $centerXAnchor), $constraintEqualToAnchor$, MSG(id, plus_minus_gl, $centerXAnchor)), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, MSG(id, one_gl, $bottomAnchor), $anchorWithOffsetToAnchor$, MSG(id, plus_minus_gl, $topAnchor)), $constraintEqualToConstant$, 6.), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, MSG(id, one_gl, $trailingAnchor), $anchorWithOffsetToAnchor$, MSG(id, two_gl, $leadingAnchor)), $constraintEqualToConstant$, 6.), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, two_gl, $centerYAnchor), $constraintEqualToAnchor$, MSG(id, one_gl, $centerYAnchor)), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, MSG(id, two_gl, $trailingAnchor), $anchorWithOffsetToAnchor$, MSG(id, three_gl, $leadingAnchor)), $constraintEqualToConstant$, 6.), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, three_gl, $centerYAnchor), $constraintEqualToAnchor$, MSG(id, one_gl, $centerYAnchor)), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, MSG(id, three_gl, $trailingAnchor), $anchorWithOffsetToAnchor$, MSG(id, plus_gl, $leadingAnchor)), $constraintEqualToConstant$, 6.), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, plus_gl, $centerYAnchor), $constraintEqualToAnchor$, MSG(id, one_gl, $centerYAnchor)), $setActive$, true);
   MSG(void, MSG(id, MSG(id, cv_lead_anch, $anchorWithOffsetToAnchor$, MSG(id, plus_minus_gl, $leadingAnchor)), $constraintEqualToConstant$, 20.), $setActive$, true);
   MSG(void, MSG(id, MSG(id, MSG(id, plus_minus_gl, $bottomAnchor), $anchorWithOffsetToAnchor$, cv_bott_anch), $constraintEqualToConstant$, 20.), $setActive$, true);
   MSG(void, MSG(id, MSG(id, MSG(id, plus_minus_gl, $trailingAnchor), $anchorWithOffsetToAnchor$, MSG(id, zero_gl, $leadingAnchor)), $constraintEqualToConstant$, 6.), $setActive$, true);
