@@ -87,6 +87,7 @@ static Class NSMenu;
 static Class NSMenuItem;
 static Class NSObject;
 static Class NSString;
+static Class NSTextField;
 static Class NSView;
 static Class NSWindow;
 
@@ -183,6 +184,7 @@ static id g_ButtonPlusMinus;  // NSButton
 static id g_ButtonZero;       // NSButton
 static id g_ButtonDot;        // NSButton
 static id g_ButtonEq;         // NSButton
+static id g_TextCurrent;      // NSTextField
 
 // Forward declarations
 static void retain(id obj);
@@ -242,6 +244,7 @@ static void LoadLibraries() {
   LOAD_CLASS(NSMenuItem);
   LOAD_CLASS(NSObject);
   LOAD_CLASS(NSString);
+  LOAD_CLASS(NSTextField);
   LOAD_CLASS(NSView);
   LOAD_CLASS(NSWindow);
 #undef LOAD_CLASS
@@ -572,7 +575,15 @@ static void InitializeWindow() {
 
   id eq_gl = nullptr;
   AddButton(&g_ButtonEq, &eq_gl, cv, "=", $onButtonEqClicked$);
+  
+  g_TextCurrent = CLASS_MSG(id, NSTextField, $new);
+  MSG(void, g_TextCurrent, $setTranslatesAutoresizingMaskIntoConstraints$, false);
+  MSG(void, g_TextCurrent, $setRefusesFirstResponder$, true);
+  MSG(void, cv, $addSubview$, g_TextCurrent);
 
+  MSG(void, MSG(id, MSG(id, MSG(id, g_TextCurrent, $bottomAnchor), $anchorWithOffsetToAnchor$, MSG(id, delete_gl, $topAnchor)), $constraintEqualToConstant$, 6.), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, cv_lead_anch, $anchorWithOffsetToAnchor$, MSG(id, g_TextCurrent, $leadingAnchor)), $constraintEqualToConstant$, 20.), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, MSG(id, g_TextCurrent, $trailingAnchor), $anchorWithOffsetToAnchor$, cv_trail_anch), $constraintEqualToConstant$, 20.), $setActive$, true);
   MSG(void, MSG(id, MSG(id, delete_gl, $centerXAnchor), $constraintEqualToAnchor$, MSG(id, plus_minus_gl, $centerXAnchor)), $setActive$, true);
   MSG(void, MSG(id, MSG(id, MSG(id, delete_gl, $bottomAnchor), $anchorWithOffsetToAnchor$, MSG(id, seven_gl, $topAnchor)), $constraintEqualToConstant$, 6.), $setActive$, true);
   MSG(void, MSG(id, MSG(id, MSG(id, delete_gl, $trailingAnchor), $anchorWithOffsetToAnchor$, MSG(id, clear_gl, $leadingAnchor)), $constraintEqualToConstant$, 6.), $setActive$, true);
