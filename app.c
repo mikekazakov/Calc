@@ -23,7 +23,6 @@ struct objc_object {
   Class isa;
 };
 typedef struct objc_object* id;
-
 static bool (*class_addMethod)(Class cls, SEL name, IMP imp, const char* types);
 static void* (*objc_autoreleasePoolPush)();
 static void (*objc_autoreleasePoolPop)(void* ctxt);
@@ -33,23 +32,26 @@ static void (*objc_registerClassPair)(Class cls);
 static id (*objc_msgSend)(id self, SEL op, ...);
 static SEL (*sel_registerName)(const char* str);
 
+// AppKit
+static void (*NSBeep)();
+
 static void* ObjCRuntime;
 static void* FoundationFramework;
 static void* AppKitFramework;
 
-#define MSG_IMPL_0(r, obj, sel) ((r (*)(id, SEL))objc_msgSend)(obj, sel)
-#define MSG_IMPL_1(r, obj, sel, a) ((r (*)(id, SEL, __typeof__(a)))objc_msgSend)(obj, sel, (a))
-#define MSG_IMPL_2(r, obj, sel, a, b) ((r (*)(id, SEL, __typeof__(a), __typeof__(b)))objc_msgSend)(obj, sel, (a), (b))
-#define MSG_IMPL_3(r, obj, sel, a, b, c) ((r (*)(id, SEL, __typeof__(a), __typeof__(b), __typeof__(c)))objc_msgSend)(obj, sel, (a), (b), (c))
-#define MSG_IMPL_4(r, obj, sel, a, b, c, d) ((r (*)(id, SEL, __typeof__(a), __typeof__(b), __typeof__(c), __typeof__(d)))objc_msgSend)(obj, sel, (a), (b), (c), (d))
+#define MSG_IMPL_0(r, obj, sel) ((r(*)(id, SEL))objc_msgSend)(obj, sel)
+#define MSG_IMPL_1(r, obj, sel, a) ((r(*)(id, SEL, typeof(a)))objc_msgSend)(obj, sel, (a))
+#define MSG_IMPL_2(r, obj, sel, a, b) ((r(*)(id, SEL, typeof(a), typeof(b)))objc_msgSend)(obj, sel, (a), (b))
+#define MSG_IMPL_3(r, obj, sel, a, b, c) ((r(*)(id, SEL, typeof(a), typeof(b), typeof(c)))objc_msgSend)(obj, sel, (a), (b), (c))
+#define MSG_IMPL_4(r, obj, sel, a, b, c, d) ((r(*)(id, SEL, typeof(a), typeof(b), typeof(c), typeof(d)))objc_msgSend)(obj, sel, (a), (b), (c), (d))
 #define MSG_IMPL_N(_4, _3, _2, _1, NAME, ...) NAME
 #define MSG(ret, obj, sel, ...) MSG_IMPL_N(__VA_ARGS__ __VA_OPT__(, ) MSG_IMPL_4, MSG_IMPL_3, MSG_IMPL_2, MSG_IMPL_1, MSG_IMPL_0)(ret, obj, sel __VA_OPT__(, ) __VA_ARGS__)
 
-#define CLASS_MSG_IMPL_0(r, cls, sel) ((r (*)(Class, SEL))objc_msgSend)(cls, sel)
-#define CLASS_MSG_IMPL_1(r, cls, sel, a) ((r (*)(Class, SEL, __typeof__(a)))objc_msgSend)(cls, sel, (a))
-#define CLASS_MSG_IMPL_2(r, cls, sel, a, b) ((r (*)(Class, SEL, __typeof__(a), __typeof__(b)))objc_msgSend)(cls, sel, (a), (b))
-#define CLASS_MSG_IMPL_3(r, cls, sel, a, b, c) ((r (*)(Class, SEL, __typeof__(a), __typeof__(b), __typeof__(c)))objc_msgSend)(cls, sel, (a), (b), (c))
-#define CLASS_MSG_IMPL_4(r, cls, sel, a, b, c, d) ((r (*)(Class, SEL, __typeof__(a), __typeof__(b), __typeof__(c), __typeof__(d)))objc_msgSend)(cls, sel, (a), (b), (c), (d))
+#define CLASS_MSG_IMPL_0(r, cls, sel) ((r(*)(Class, SEL))objc_msgSend)(cls, sel)
+#define CLASS_MSG_IMPL_1(r, cls, sel, a) ((r(*)(Class, SEL, typeof(a)))objc_msgSend)(cls, sel, (a))
+#define CLASS_MSG_IMPL_2(r, cls, sel, a, b) ((r(*)(Class, SEL, typeof(a), typeof(b)))objc_msgSend)(cls, sel, (a), (b))
+#define CLASS_MSG_IMPL_3(r, cls, sel, a, b, c) ((r(*)(Class, SEL, typeof(a), typeof(b), typeof(c)))objc_msgSend)(cls, sel, (a), (b), (c))
+#define CLASS_MSG_IMPL_4(r, cls, sel, a, b, c, d) ((r(*)(Class, SEL, typeof(a), typeof(b), typeof(c), typeof(d)))objc_msgSend)(cls, sel, (a), (b), (c), (d))
 #define CLASS_MSG_IMPL_N(_4, _3, _2, _1, NAME, ...) NAME
 #define CLASS_MSG(ret, class, sel, ...) \
   CLASS_MSG_IMPL_N(__VA_ARGS__ __VA_OPT__(, ) CLASS_MSG_IMPL_4, CLASS_MSG_IMPL_3, CLASS_MSG_IMPL_2, CLASS_MSG_IMPL_1, CLASS_MSG_IMPL_0)(ret, class, sel __VA_OPT__(, ) __VA_ARGS__)
@@ -158,6 +160,47 @@ static SEL $terminate$;
 static SEL $topAnchor;
 static SEL $trailingAnchor;
 static SEL $widthAnchor;
+static SEL $initWithFormat$;
+static SEL $stringWithFormat$;
+static SEL $setStringValue$;
+
+// Number
+static constexpr int NUMBER_BASE = 1000;
+static constexpr int NUMBER_MAX = 14;
+struct Number {
+  u16 limbs[NUMBER_MAX];  // 1000-based digits
+  u8 len;                 // len
+  u8 scale;               // scale of number, i.e. x 10^(-scale)
+  u8 sign;                // 0 = positive
+  // NAN is encoded as scale=255
+};
+
+// Calculator
+static constexpr int MAX_TOKENS = 64;
+enum TokenType {
+  TOK_NUM  // holds a number
+};
+struct Token {
+  enum TokenType type;
+  // f64 number;
+  struct Number number;
+};
+struct Calculator {
+  struct Token toks[MAX_TOKENS];
+  u64 toks_num;
+};
+enum CalcCommand {
+  CMD_0,
+  CMD_1,
+  CMD_2,
+  CMD_3,
+  CMD_4,
+  CMD_5,
+  CMD_6,
+  CMD_7,
+  CMD_8,
+  CMD_9,
+};
 
 // Program state
 static id g_App;              // NSApplication
@@ -185,6 +228,7 @@ static id g_ButtonZero;       // NSButton
 static id g_ButtonDot;        // NSButton
 static id g_ButtonEq;         // NSButton
 static id g_TextCurrent;      // NSTextField
+static struct Calculator g_CurrentState;
 
 // Forward declarations
 static void retain(id obj);
@@ -198,6 +242,16 @@ static void InitializeAppDelegate();
 static void InitializeApplication();
 static void InitializeMainMenu();
 static void InitializeWindow();
+static void CalcInit(struct Calculator* calc);
+static id CalcVisualize(struct Calculator* calc);
+static bool CalcProcess(struct Calculator* calc, enum CalcCommand cmd);
+
+static struct Number NumberFromU64(u64 number);
+static struct Number NumberNAN();
+static struct Number NumberByAppendedDigit(struct Number number, u8 digit);
+static id NumberToNSString(struct Number number);
+static bool NumberIsNAN(struct Number number);
+static bool NumberIsZero(struct Number number);
 
 static void retain(id obj) {
   MSG(void, obj, $retain);
@@ -233,6 +287,7 @@ static void LoadLibraries() {
   objc_msgSend = LoadSymbolorDie(ObjCRuntime, "objc_msgSend");
   objc_registerClassPair = LoadSymbolorDie(ObjCRuntime, "objc_registerClassPair");
   sel_registerName = LoadSymbolorDie(ObjCRuntime, "sel_registerName");
+  NSBeep = LoadSymbolorDie(AppKitFramework, "NSBeep");
 #define LOAD_CLASS(cls) cls = objc_getClass(#cls);
   LOAD_CLASS(NSAppearance);
   LOAD_CLASS(NSApplication);
@@ -325,12 +380,23 @@ static void RegisterSelectors() {
   REGISTER($topAnchor);
   REGISTER($trailingAnchor);
   REGISTER($widthAnchor);
+  REGISTER($initWithFormat$);
+  REGISTER($stringWithFormat$);
+  REGISTER($setStringValue$);
 #undef REGISTER
 }
 
 static void onApplicationDidFinishLaunching(id self, SEL cmd, id notification) {
   InitializeWindow();
   MSG(void, g_App, $activateIgnoringOtherApps$, true);
+}
+
+static void feedCmdAndUpdate(enum CalcCommand cmd) {
+  if (CalcProcess(&g_CurrentState, cmd)) {
+    MSG(void, g_TextCurrent, $setStringValue$, CalcVisualize(&g_CurrentState));
+  } else {
+    NSBeep();
+  }
 }
 
 static void onButtonDeleteClicked(id self, SEL cmd, id sender) {
@@ -350,15 +416,15 @@ static void onButtonDivideClicked(id self, SEL cmd, id sender) {
 }
 
 static void onButtonSevenClicked(id self, SEL cmd, id sender) {
-  printf("onButtonSevenClicked\n");
+  feedCmdAndUpdate(CMD_7);
 }
 
 static void onButtonEightClicked(id self, SEL cmd, id sender) {
-  printf("onButtonEightClicked\n");
+  feedCmdAndUpdate(CMD_8);
 }
 
 static void onButtonNineClicked(id self, SEL cmd, id sender) {
-  printf("onButtonNineClicked\n");
+  feedCmdAndUpdate(CMD_9);
 }
 
 static void onButtonMultiplyClicked(id self, SEL cmd, id sender) {
@@ -366,15 +432,15 @@ static void onButtonMultiplyClicked(id self, SEL cmd, id sender) {
 }
 
 static void onButtonFourClicked(id self, SEL cmd, id sender) {
-  printf("onButtonFourClicked\n");
+  feedCmdAndUpdate(CMD_4);
 }
 
 static void onButtonFiveClicked(id self, SEL cmd, id sender) {
-  printf("onButtonFiveClicked\n");
+  feedCmdAndUpdate(CMD_5);
 }
 
 static void onButtonSixClicked(id self, SEL cmd, id sender) {
-  printf("onButtonSixClicked\n");
+  feedCmdAndUpdate(CMD_6);
 }
 
 static void onButtonMinusClicked(id self, SEL cmd, id sender) {
@@ -382,15 +448,15 @@ static void onButtonMinusClicked(id self, SEL cmd, id sender) {
 }
 
 static void onButtonOneClicked(id self, SEL cmd, id sender) {
-  printf("onButtonOneClicked\n");
+  feedCmdAndUpdate(CMD_1);
 }
 
 static void onButtonTwoClicked(id self, SEL cmd, id sender) {
-  printf("onButtonTwoClicked\n");
+  feedCmdAndUpdate(CMD_2);
 }
 
 static void onButtonThreeClicked(id self, SEL cmd, id sender) {
-  printf("onButtonThreeClicked\n");
+  feedCmdAndUpdate(CMD_3);
 }
 
 static void onButtonPlusClicked(id self, SEL cmd, id sender) {
@@ -402,7 +468,7 @@ static void onButtonPlusMinusClicked(id self, SEL cmd, id sender) {
 }
 
 static void onButtonZeroClicked(id self, SEL cmd, id sender) {
-  printf("onButtonZeroClicked\n");
+  feedCmdAndUpdate(CMD_0);
 }
 
 static void onButtonDotClicked(id self, SEL cmd, id sender) {
@@ -575,11 +641,13 @@ static void InitializeWindow() {
 
   id eq_gl = nullptr;
   AddButton(&g_ButtonEq, &eq_gl, cv, "=", $onButtonEqClicked$);
-  
+
   g_TextCurrent = CLASS_MSG(id, NSTextField, $new);
   MSG(void, g_TextCurrent, $setTranslatesAutoresizingMaskIntoConstraints$, false);
   MSG(void, g_TextCurrent, $setRefusesFirstResponder$, true);
   MSG(void, cv, $addSubview$, g_TextCurrent);
+
+  MSG(void, g_TextCurrent, $setStringValue$, CalcVisualize(&g_CurrentState));
 
   MSG(void, MSG(id, MSG(id, MSG(id, g_TextCurrent, $bottomAnchor), $anchorWithOffsetToAnchor$, MSG(id, delete_gl, $topAnchor)), $constraintEqualToConstant$, 6.), $setActive$, true);
   MSG(void, MSG(id, MSG(id, cv_lead_anch, $anchorWithOffsetToAnchor$, MSG(id, g_TextCurrent, $leadingAnchor)), $constraintEqualToConstant$, 20.), $setActive$, true);
@@ -631,10 +699,173 @@ static void InitializeWindow() {
   MSG(void, cv, $release);
 }
 
+static void CalcInit(struct Calculator* calc) {
+  calc->toks[0].type = TOK_NUM;
+  calc->toks[0].number = NumberFromU64(42);
+  calc->toks_num = 1;
+}
+
+static id CalcVisualize(struct Calculator* calc) {
+  id str = NumberToNSString(calc->toks[0].number);
+  return str;
+}
+
+static bool CalcProcess(struct Calculator* calc, enum CalcCommand cmd) {
+  switch (cmd) {
+    case CMD_0: {
+      // TODO: check if the top is a number
+      struct Number new = NumberByAppendedDigit(calc->toks[calc->toks_num - 1].number, 0);
+      if (NumberIsNAN(new))
+        return false;
+      calc->toks[calc->toks_num - 1].number = new;
+      return true;
+      break;
+    }
+    case CMD_1: {
+      // TODO: check if the top is a number
+      struct Number new = NumberByAppendedDigit(calc->toks[calc->toks_num - 1].number, 1);
+      if (NumberIsNAN(new))
+        return false;
+      calc->toks[calc->toks_num - 1].number = new;
+      return true;
+      break;
+    }
+
+    default:;
+  }
+  return false;
+}
+
+static struct Number NumberFromU64(u64 number) {
+  struct Number r = {0};
+  if (number == 0) {
+    r.len = 1;
+    return r;
+  }
+  while (number != 0) {
+    r.limbs[r.len++] = number % NUMBER_BASE;
+    number = number / NUMBER_BASE;
+  }
+  return r;
+}
+
+static struct Number NumberNAN() {
+  struct Number nan = {0};
+  nan.len = 1;
+  nan.scale = 255;
+  return nan;
+}
+
+static id NumberToNSString(struct Number number) {
+  if (NumberIsNAN(number)) {
+    return CLASS_MSG(id, NSString, $stringWithUTF8String$, "NaN");
+  }
+
+  // First grab the digits into a temporary buffer
+  char digits[64] = {0};
+  u8 len = number.len;
+  if (len == 0)
+    len = 1;
+  u32 dp = 0;
+  u16 top = number.limbs[len - 1];
+  if (top >= 100) {
+    digits[dp++] = (char)('0' + (top / 100));
+    digits[dp++] = (char)('0' + ((top / 10) % 10));
+    digits[dp++] = (char)('0' + (top % 10));
+  } else if (top >= 10) {
+    digits[dp++] = (char)('0' + (top / 10));
+    digits[dp++] = (char)('0' + (top % 10));
+  } else {
+    digits[dp++] = (char)('0' + top);
+  }
+
+  for (i32 i = (i32)len - 2; i >= 0; --i) {
+    u16 limb = number.limbs[i];
+    digits[dp++] = (char)('0' + (limb / 100));
+    digits[dp++] = (char)('0' + ((limb / 10) % 10));
+    digits[dp++] = (char)('0' + (limb % 10));
+  }
+
+  // Now format the string
+  char out[128] = {0};
+  u32 op = 0;
+  if (number.sign)
+    out[op++] = '-';
+
+  if (number.scale == 0) {
+    for (u32 i = 0; i < dp; ++i)
+      out[op++] = digits[i];
+  } else if (number.scale >= dp) {
+    out[op++] = '0';
+    out[op++] = '.';
+    for (u32 i = 0; i < (u32)number.scale - dp; ++i)
+      out[op++] = '0';
+    for (u32 i = 0; i < dp; ++i)
+      out[op++] = digits[i];
+  } else {
+    u32 int_len = dp - number.scale;
+    for (u32 i = 0; i < int_len; ++i)
+      out[op++] = digits[i];
+    out[op++] = '.';
+    for (u32 i = int_len; i < dp; ++i)
+      out[op++] = digits[i];
+  }
+
+  out[op] = 0;
+  return CLASS_MSG(id, NSString, $stringWithUTF8String$, out);
+}
+
+static bool NumberIsNAN(struct Number number) {
+  return number.scale == 255;
+}
+
+static bool NumberIsZero(struct Number number) {
+  if (NumberIsNAN(number))
+    return false;
+  for (u32 i = 0; i < number.len; ++i)
+    if (number.limbs[i] != 0)
+      return false;
+  return true;
+}
+
+static struct Number NumberByAppendedDigit(struct Number number, u8 digit) {
+  if (digit > 9 || NumberIsNAN(number))
+    return NumberNAN();
+  if (NumberIsZero(number) && number.scale == 0)
+    return NumberFromU64(digit);
+
+  struct Number out = number;
+  if (out.len == 0)
+    out.len = 1;
+
+  // Append a decimal digit at the right by computing mantissa = mantissa * 10 + digit.
+  u32 carry = digit;
+  for (u32 i = 0; i < out.len; ++i) {
+    u32 v = (u32)out.limbs[i] * 10u + carry;
+    out.limbs[i] = (u16)(v % NUMBER_BASE);
+    carry = v / NUMBER_BASE;
+  }
+
+  if (carry != 0) {
+    if (out.len >= NUMBER_MAX)
+      return NumberNAN();
+    out.limbs[out.len++] = (u16)(carry % NUMBER_BASE);
+  }
+
+  if (out.scale != 0) {
+    if (out.scale >= 254)
+      return NumberNAN();
+    out.scale += 1;
+  }
+
+  return out;
+}
+
 int main() {
   LoadLibraries();
   RegisterSelectors();
   void* autorelease_pool = objc_autoreleasePoolPush();
+  CalcInit(&g_CurrentState);
   InitializeAppDelegate();
   InitializeApplication();
   InitializeMainMenu();
