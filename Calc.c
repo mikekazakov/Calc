@@ -175,12 +175,14 @@ static SEL $performClick$;
 // Number
 static constexpr u64 NUMBER_BASE = 1000;
 static constexpr u64 NUMBER_MAX = 14;
+static constexpr u8 NUMBER_FLAG_SIGN = 0x01;  // The number is negative.
+static constexpr u8 NUMBER_FLAG_NAN = 0x02;   // The number is a NaN, nothing else matters.
+static constexpr u8 NUMBER_FLAG_DOT = 0x04;   // The number should display a decimal point, regardless of the number value.
 struct Number {
   u16 limbs[NUMBER_MAX];  // 1000-based digits
   u8 len;                 // len
   u8 scale;               // scale of number, i.e. x 10^(-scale)
-  u8 sign;                // 0 = positive
-  // NAN is encoded as scale=255
+  u8 flags;
 };
 
 // Calculator
@@ -209,6 +211,7 @@ enum CalcCommand {
   CMD_8,
   CMD_9,
   CMD_DELETE,
+  CMD_DOT,
 };
 
 // Program state
@@ -267,7 +270,8 @@ static bool CalcProcess(struct Calculator* calc, enum CalcCommand cmd);
 static struct Number NumberFromU64(u64 number);
 static struct Number NumberNAN();
 static struct Number NumberByAppendingDigit(struct Number number, u8 digit);
-static struct Number NumberByRemovingRightmostDigit(struct Number number);
+static struct Number NumberByRemovingRightmostSymbol(struct Number number);
+static struct Number NumberByForcingDot(struct Number number);
 static id NumberToNSString(struct Number number);
 static bool NumberIsNAN(struct Number number);
 static bool NumberIsZero(struct Number number);
@@ -415,6 +419,7 @@ static void onApplicationDidFinishLaunching(id self, SEL cmd, id notification) {
 }
 
 static void onWindowKeyDown(id self, SEL cmd, id event) {
+  //    u16 keyCode = MSG(u16, event, $keyCode);
   switch (MSG(u16, event, $keyCode)) {
     case 0x1D:
     case 0x52:
@@ -448,6 +453,9 @@ static void onWindowKeyDown(id self, SEL cmd, id event) {
       return MSG(void, g_ButtonNine, $performClick$, (id)0);
     case 0x33:
       return MSG(void, g_ButtonDelete, $performClick$, (id)0);
+    case 0x41:
+      // TODO: add char-based '.' as well
+      return MSG(void, g_ButtonDot, $performClick$, (id)0);
     default:
       struct objc_super super = {.receiver = self, .super_class = NSWindow};
       ((void (*)(struct objc_super*, SEL, id))objc_msgSendSuper)(&super, $keyDown$, event);
@@ -535,7 +543,7 @@ static void onButtonZeroClicked(id self, SEL cmd, id sender) {
 }
 
 static void onButtonDotClicked(id self, SEL cmd, id sender) {
-  printf("onButtonDotClicked\n");
+  feedCmdAndUpdate(CMD_DOT);
 }
 
 static void onButtonEqClicked(id self, SEL cmd, id sender) {
@@ -798,7 +806,15 @@ static bool CalcProcess(struct Calculator* calc, enum CalcCommand cmd) {
     }
     case CMD_DELETE: {
       // TODO: check if the top is actually a number
-      struct Number new = NumberByRemovingRightmostDigit(calc->toks[calc->toks_num - 1].number);
+      struct Number new = NumberByRemovingRightmostSymbol(calc->toks[calc->toks_num - 1].number);
+      if (NumberIsNAN(new))
+        return false;
+      calc->toks[calc->toks_num - 1].number = new;
+      return true;
+    }
+    case CMD_DOT: {
+      // TODO: check if the top is actually a number
+      struct Number new = NumberByForcingDot(calc->toks[calc->toks_num - 1].number);
       if (NumberIsNAN(new))
         return false;
       calc->toks[calc->toks_num - 1].number = new;
@@ -825,7 +841,7 @@ static struct Number NumberFromU64(u64 number) {
 static struct Number NumberNAN() {
   struct Number nan = {0};
   nan.len = 1;
-  nan.scale = 255;
+  nan.flags = NUMBER_FLAG_NAN;
   return nan;
 }
 
@@ -862,12 +878,14 @@ static id NumberToNSString(struct Number number) {
   // Now format the string
   char out[128] = {0};
   u32 op = 0;
-  if (number.sign)
+  if (number.flags & NUMBER_FLAG_SIGN)
     out[op++] = '-';
 
   if (number.scale == 0) {
     for (u32 i = 0; i < dp; ++i)
       out[op++] = digits[i];
+    if (number.flags & NUMBER_FLAG_DOT)
+      out[op++] = '.';
   } else if (number.scale >= dp) {
     out[op++] = '0';
     out[op++] = '.';
@@ -889,7 +907,7 @@ static id NumberToNSString(struct Number number) {
 }
 
 static bool NumberIsNAN(struct Number number) {
-  return number.scale == 255;
+  return number.flags & NUMBER_FLAG_NAN;
 }
 
 static bool NumberIsZero(struct Number number) {
@@ -904,7 +922,7 @@ static bool NumberIsZero(struct Number number) {
 static struct Number NumberByAppendingDigit(struct Number number, u8 digit) {
   if (digit > 9 || NumberIsNAN(number))
     return NumberNAN();
-  if (NumberIsZero(number) && number.scale == 0)
+  if (NumberIsZero(number) && number.scale == 0 && !(number.flags & NUMBER_FLAG_DOT))
     return NumberFromU64(digit);
 
   struct Number out = number;
@@ -925,7 +943,7 @@ static struct Number NumberByAppendingDigit(struct Number number, u8 digit) {
     out.limbs[out.len++] = (u16)(carry % NUMBER_BASE);
   }
 
-  if (out.scale != 0) {
+  if (out.scale != 0 || (out.flags & NUMBER_FLAG_DOT)) {
     if (out.scale >= 254)
       return NumberNAN();
     out.scale += 1;
@@ -934,9 +952,14 @@ static struct Number NumberByAppendingDigit(struct Number number, u8 digit) {
   return out;
 }
 
-static struct Number NumberByRemovingRightmostDigit(struct Number number) {
+static struct Number NumberByRemovingRightmostSymbol(struct Number number) {
   if (NumberIsNAN(number))
     return number;
+
+  if (number.scale == 0 && (number.flags & NUMBER_FLAG_DOT)) {
+    number.flags &= ~NUMBER_FLAG_DOT;
+    return number;
+  }
 
   u32 len = number.len ? number.len : 1;
 
@@ -956,6 +979,17 @@ static struct Number NumberByRemovingRightmostDigit(struct Number number) {
     number.scale -= 1;
   }
 
+  return number;
+}
+
+static struct Number NumberByForcingDot(struct Number number) {
+  if (NumberIsNAN(number))
+    return number;
+
+  if (number.scale != 0 || (number.flags & NUMBER_FLAG_DOT))
+    return NumberNAN();
+
+  number.flags |= NUMBER_FLAG_DOT;
   return number;
 }
 
