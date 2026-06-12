@@ -171,10 +171,11 @@ static SEL $setStringValue$;
 static SEL $keyDown$;
 static SEL $keyCode;
 static SEL $performClick$;
+static SEL $stringByAppendingString$;
 
 // Number
 static constexpr u64 NUMBER_BASE = 1000;
-static constexpr u64 NUMBER_MAX = 14;
+static constexpr u64 NUMBER_MAX = 14;         // Maximum amount of 1000-based limbs in a number.
 static constexpr u8 NUMBER_FLAG_SIGN = 0x01;  // The number is negative.
 static constexpr u8 NUMBER_FLAG_NAN = 0x02;   // The number is a NaN, nothing else matters.
 static constexpr u8 NUMBER_FLAG_DOT = 0x04;   // The number should display a decimal point, regardless of the number value.
@@ -188,11 +189,11 @@ struct Number {
 // Calculator
 static constexpr u64 MAX_TOKENS = 64;
 enum TokenType {
-  TOK_NUM  // holds a number
+  TOK_NUM,  // holds a number
+  TOK_ADD   // holds an addition operator
 };
 struct Token {
   enum TokenType type;
-  // f64 number;
   struct Number number;
 };
 struct Calculator {
@@ -212,6 +213,8 @@ enum CalcCommand {
   CMD_9,
   CMD_DELETE,
   CMD_DOT,
+  CMD_PLUS,
+  CMD_EVAL,
 };
 
 // Program state
@@ -265,6 +268,7 @@ static void InitializeWindow();
 static void CalcInit(struct Calculator* calc);
 static id CalcVisualize(struct Calculator* calc);
 static bool CalcProcess(struct Calculator* calc, enum CalcCommand cmd);
+static struct Number CalcEval(struct Calculator* calc);
 
 // Number functions
 static struct Number NumberFromU64(u64 number);
@@ -272,7 +276,10 @@ static struct Number NumberNAN();
 static struct Number NumberByAppendingDigit(struct Number number, u8 digit);
 static struct Number NumberByRemovingRightmostSymbol(struct Number number);
 static struct Number NumberByForcingDot(struct Number number);
+static struct Number NumberByExtendingScaleTo(struct Number number, u8 scale);
+static struct Number NumberByAddingNumber(struct Number left, struct Number right);
 static id NumberToNSString(struct Number number);
+static u64 NumberOccupiedSymbols(struct Number number);
 static bool NumberIsNAN(struct Number number);
 static bool NumberIsZero(struct Number number);
 
@@ -410,6 +417,7 @@ static void RegisterSelectors() {
   REGISTER($keyDown$);
   REGISTER($keyCode);
   REGISTER($performClick$);
+  REGISTER($stringByAppendingString$);
 #undef REGISTER
 }
 
@@ -419,7 +427,8 @@ static void onApplicationDidFinishLaunching(id self, SEL cmd, id notification) {
 }
 
 static void onWindowKeyDown(id self, SEL cmd, id event) {
-  //    u16 keyCode = MSG(u16, event, $keyCode);
+  //      u16 keyCode = MSG(u16, event, $keyCode);
+  // TODO: switch to char-based selection
   switch (MSG(u16, event, $keyCode)) {
     case 0x1D:
     case 0x52:
@@ -454,8 +463,9 @@ static void onWindowKeyDown(id self, SEL cmd, id event) {
     case 0x33:
       return MSG(void, g_ButtonDelete, $performClick$, (id)0);
     case 0x41:
-      // TODO: add char-based '.' as well
       return MSG(void, g_ButtonDot, $performClick$, (id)0);
+    case 0x45:
+      return MSG(void, g_ButtonPlus, $performClick$, (id)0);
     default:
       struct objc_super super = {.receiver = self, .super_class = NSWindow};
       ((void (*)(struct objc_super*, SEL, id))objc_msgSendSuper)(&super, $keyDown$, event);
@@ -531,7 +541,7 @@ static void onButtonThreeClicked(id self, SEL cmd, id sender) {
 }
 
 static void onButtonPlusClicked(id self, SEL cmd, id sender) {
-  printf("onButtonPlusClicked\n");
+  feedCmdAndUpdate(CMD_PLUS);
 }
 
 static void onButtonPlusMinusClicked(id self, SEL cmd, id sender) {
@@ -547,7 +557,7 @@ static void onButtonDotClicked(id self, SEL cmd, id sender) {
 }
 
 static void onButtonEqClicked(id self, SEL cmd, id sender) {
-  printf("onButtonEqClicked\n");
+  feedCmdAndUpdate(CMD_EVAL);
 }
 
 static void InitializeAppDelegate() {
@@ -781,11 +791,27 @@ static void CalcInit(struct Calculator* calc) {
 }
 
 static id CalcVisualize(struct Calculator* calc) {
-  id str = NumberToNSString(calc->toks[0].number);
+  id str = CLASS_MSG(id, NSString, $stringWithUTF8String$, "");
+  for (u64 i = 0; i < calc->toks_num; ++i) {
+    switch (calc->toks[i].type) {
+      case TOK_NUM: {
+        id tok_str = NumberToNSString(calc->toks[i].number);
+        str = MSG(id, str, $stringByAppendingString$, tok_str);
+        break;
+      }
+      case TOK_ADD: {
+        id tok_str = CLASS_MSG(id, NSString, $stringWithUTF8String$, "+");
+        str = MSG(id, str, $stringByAppendingString$, tok_str);
+        break;
+      }
+    }
+  }
   return str;
 }
 
 static bool CalcProcess(struct Calculator* calc, enum CalcCommand cmd) {
+  if (calc->toks_num == 0)
+    return false;
   switch (cmd) {
     case CMD_0:
     case CMD_1:
@@ -797,32 +823,79 @@ static bool CalcProcess(struct Calculator* calc, enum CalcCommand cmd) {
     case CMD_7:
     case CMD_8:
     case CMD_9: {
-      // TODO: check if the top is actually a number
-      struct Number new = NumberByAppendingDigit(calc->toks[calc->toks_num - 1].number, (u8)cmd);
-      if (NumberIsNAN(new))
-        return false;
-      calc->toks[calc->toks_num - 1].number = new;
-      return true;
+      if (calc->toks[calc->toks_num - 1].type == TOK_NUM) {
+        struct Number new = NumberByAppendingDigit(calc->toks[calc->toks_num - 1].number, (u8)cmd);
+        if (NumberIsNAN(new))
+          return false;
+        calc->toks[calc->toks_num - 1].number = new;
+        return true;
+      } else {
+        if (calc->toks_num == MAX_TOKENS)
+          return false;
+        calc->toks[calc->toks_num].type = TOK_NUM;
+        calc->toks[calc->toks_num].number = NumberFromU64((u64)cmd);
+        calc->toks_num++;
+        return true;
+      }
     }
     case CMD_DELETE: {
-      // TODO: check if the top is actually a number
-      struct Number new = NumberByRemovingRightmostSymbol(calc->toks[calc->toks_num - 1].number);
-      if (NumberIsNAN(new))
-        return false;
-      calc->toks[calc->toks_num - 1].number = new;
-      return true;
+      if (calc->toks[calc->toks_num - 1].type == TOK_NUM &&  //
+          (calc->toks_num == 1 || NumberOccupiedSymbols(calc->toks[calc->toks_num - 1].number) > 1)) {
+        struct Number new = NumberByRemovingRightmostSymbol(calc->toks[calc->toks_num - 1].number);
+        if (NumberIsNAN(new))
+          return false;
+        calc->toks[calc->toks_num - 1].number = new;
+        return true;
+      } else {
+        if (calc->toks_num == 1)
+          return false;
+        calc->toks_num--;
+        return true;
+      }
     }
     case CMD_DOT: {
-      // TODO: check if the top is actually a number
+      if (calc->toks[calc->toks_num - 1].type != TOK_NUM)
+        return false;  // TODO: actually "10 + ." should yeild "10 + 0."
       struct Number new = NumberByForcingDot(calc->toks[calc->toks_num - 1].number);
       if (NumberIsNAN(new))
         return false;
       calc->toks[calc->toks_num - 1].number = new;
       return true;
     }
-    default:;
+    case CMD_PLUS: {
+      if (calc->toks_num == MAX_TOKENS)
+        return false;
+      if (calc->toks[calc->toks_num - 1].type == TOK_ADD)
+        return true;
+      if (calc->toks[calc->toks_num - 1].type != TOK_NUM)
+        return false;
+      calc->toks[calc->toks_num].type = TOK_ADD;
+      calc->toks_num++;
+      return true;
+    }
+    case CMD_EVAL: {
+      struct Number result = CalcEval(calc);
+      if (NumberIsNAN(result))
+        return false;
+      calc->toks_num = 1;
+      calc->toks[0].type = TOK_NUM;
+      calc->toks[0].number = result;
+      return true;
+    }
   }
   return false;
+}
+
+static struct Number CalcEval(struct Calculator* calc) {
+  if (calc->toks_num == 0 || calc->toks[calc->toks_num - 1].type != TOK_NUM)
+    return NumberNAN();
+  struct Number acc = calc->toks[0].number;
+  for (u64 i = 1; i < calc->toks_num; i += 2) {
+    if (calc->toks[i].type != TOK_ADD || calc->toks[i + 1].type != TOK_NUM)
+      return NumberNAN();
+    acc = NumberByAddingNumber(acc, calc->toks[i + 1].number);
+  }
+  return acc;
 }
 
 static struct Number NumberFromU64(u64 number) {
@@ -846,9 +919,8 @@ static struct Number NumberNAN() {
 }
 
 static id NumberToNSString(struct Number number) {
-  if (NumberIsNAN(number)) {
+  if (NumberIsNAN(number))
     return CLASS_MSG(id, NSString, $stringWithUTF8String$, "NaN");
-  }
 
   // First grab the digits into a temporary buffer
   char digits[64] = {0};
@@ -904,6 +976,15 @@ static id NumberToNSString(struct Number number) {
 
   out[op] = 0;
   return CLASS_MSG(id, NSString, $stringWithUTF8String$, out);
+}
+
+static u64 NumberOccupiedSymbols(struct Number number) {
+  if (NumberIsNAN(number))
+    return 0;
+
+  // TODO: this is stupid
+  id string = NumberToNSString(number);
+  return MSG(u64, string, $length);
 }
 
 static bool NumberIsNAN(struct Number number) {
@@ -991,6 +1072,111 @@ static struct Number NumberByForcingDot(struct Number number) {
 
   number.flags |= NUMBER_FLAG_DOT;
   return number;
+}
+
+static struct Number NumberByExtendingScaleTo(struct Number number, u8 scale) {
+  if (NumberIsNAN(number))
+    return number;
+
+  while (number.scale < scale) {
+    u32 carry = 0;
+    u32 len = number.len ? number.len : 1;
+    for (u32 i = 0; i < len; ++i) {
+      u32 v = (u32)number.limbs[i] * 10 + carry;
+      number.limbs[i] = (u16)(v % NUMBER_BASE);
+      carry = v / NUMBER_BASE;
+    }
+    if (carry != 0) {
+      if (len >= NUMBER_MAX)
+        return NumberNAN();
+      number.limbs[len++] = (u16)carry;
+      number.len = (u8)len;
+    }
+    number.scale += 1;
+  }
+  return number;
+}
+
+static struct Number NumberByAddingNumber(struct Number left, struct Number right) {
+  if (NumberIsNAN(left) || NumberIsNAN(right))
+    return NumberNAN();
+
+  u8 max_scale = left.scale > right.scale ? left.scale : right.scale;
+  left = NumberByExtendingScaleTo(left, left.scale > right.scale ? left.scale : right.scale);
+  right = NumberByExtendingScaleTo(right, left.scale > right.scale ? left.scale : right.scale);
+  if (NumberIsNAN(left) || NumberIsNAN(right))
+    return NumberNAN();
+
+  bool left_neg = left.flags & NUMBER_FLAG_SIGN;
+  bool right_neg = right.flags & NUMBER_FLAG_SIGN;
+  bool result_neg = false;
+  bool perform_add = left_neg == right_neg;
+  if (perform_add) {
+    result_neg = left_neg;
+  } else {
+    i32 cmp = 0;
+    if (left.len != right.len) {
+      cmp = left.len > right.len ? 1 : -1;
+    } else {
+      for (i32 i = (i32)left.len - 1; i >= 0; --i) {
+        if (left.limbs[i] != right.limbs[i]) {
+          cmp = left.limbs[i] > right.limbs[i] ? 1 : -1;
+          break;
+        }
+      }
+    }
+    result_neg = cmp > 0 ? left_neg : right_neg;
+    if (cmp < 0) {
+      struct Number temp = left;
+      left = right;
+      right = temp;
+    }
+  }
+
+  u32 max_len = left.len > right.len ? left.len : right.len;
+  if (perform_add) {  // left += right
+    u32 carry = 0;
+    for (u32 i = 0; i < max_len; ++i) {
+      u32 l = i < left.len ? left.limbs[i] : 0;
+      u32 r = i < right.len ? right.limbs[i] : 0;
+      u32 sum = l + r + carry;
+      left.limbs[i] = (u16)(sum % NUMBER_BASE);
+      carry = sum / NUMBER_BASE;
+    }
+    left.len = (u8)max_len;
+    if (carry != 0) {
+      if (left.len == NUMBER_MAX)
+        return NumberNAN();
+      left.limbs[left.len] = (u16)carry;
+      left.len++;
+    }
+  } else {  // left -= right
+    i32 borrow = 0;
+    for (u32 i = 0; i < max_len; ++i) {
+      i32 l = i < left.len ? left.limbs[i] : 0;
+      i32 r = i < right.len ? right.limbs[i] : 0;
+      i32 diff = l - r - borrow;
+      if (diff < 0) {
+        diff += NUMBER_BASE;
+        borrow = 1;
+      } else {
+        borrow = 0;
+      }
+      left.limbs[i] = (u16)diff;
+    }
+    while (max_len > 1 && left.limbs[max_len - 1] == 0)
+      max_len--;
+    left.len = (u8)max_len;
+  }
+
+  left.scale = max_scale;
+
+  if (result_neg)
+    left.flags |= NUMBER_FLAG_SIGN;
+  else
+    left.flags &= ~NUMBER_FLAG_SIGN;
+
+  return left;
 }
 
 int main() {
