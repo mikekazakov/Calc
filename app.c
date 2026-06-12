@@ -23,13 +23,18 @@ struct objc_object {
   Class isa;
 };
 typedef struct objc_object* id;
+struct objc_super {
+  id receiver;
+  Class super_class;
+};
 static bool (*class_addMethod)(Class cls, SEL name, IMP imp, const char* types);
 static void* (*objc_autoreleasePoolPush)();
 static void (*objc_autoreleasePoolPop)(void* ctxt);
 static Class (*objc_getClass)(const char* name);
 static Class (*objc_allocateClassPair)(Class superclass, const char* name, u64 extraBytes);
 static void (*objc_registerClassPair)(Class cls);
-static id (*objc_msgSend)(id self, SEL op, ...);
+static void (*objc_msgSend)(void /*id self, SEL op, ...*/);
+static void (*objc_msgSendSuper)(void /*struct objc_super *super, SEL op, ...*/);
 static SEL (*sel_registerName)(const char* str);
 
 // AppKit
@@ -163,10 +168,13 @@ static SEL $widthAnchor;
 static SEL $initWithFormat$;
 static SEL $stringWithFormat$;
 static SEL $setStringValue$;
+static SEL $keyDown$;
+static SEL $keyCode;
+static SEL $performClick$;
 
 // Number
-static constexpr int NUMBER_BASE = 1000;
-static constexpr int NUMBER_MAX = 14;
+static constexpr u64 NUMBER_BASE = 1000;
+static constexpr u64 NUMBER_MAX = 14;
 struct Number {
   u16 limbs[NUMBER_MAX];  // 1000-based digits
   u8 len;                 // len
@@ -176,7 +184,7 @@ struct Number {
 };
 
 // Calculator
-static constexpr int MAX_TOKENS = 64;
+static constexpr u64 MAX_TOKENS = 64;
 enum TokenType {
   TOK_NUM  // holds a number
 };
@@ -207,6 +215,7 @@ static id g_App;              // NSApplication
 static id g_AppDelegate;      // AppDelegate
 static id g_MainMenu;         // NSMenu
 static id g_Window;           // NSWindow
+static Class g_WindowClass;   // AppWindow
 static id g_ButtonDelete;     // NSButton
 static id g_ButtonClear;      // NSButton
 static id g_ButtonPercent;    // NSButton
@@ -238,6 +247,7 @@ static void* LoadSymbolorDie(void* handle, const char* symbol);
 static void LoadLibraries();
 static void RegisterSelectors();
 static void onApplicationDidFinishLaunching(id self, SEL cmd, id notification);
+static void onWindowKeyDown(id self, SEL cmd, id event);
 static void InitializeAppDelegate();
 static void InitializeApplication();
 static void InitializeMainMenu();
@@ -285,6 +295,7 @@ static void LoadLibraries() {
   objc_allocateClassPair = LoadSymbolorDie(ObjCRuntime, "objc_allocateClassPair");
   class_addMethod = LoadSymbolorDie(ObjCRuntime, "class_addMethod");
   objc_msgSend = LoadSymbolorDie(ObjCRuntime, "objc_msgSend");
+  objc_msgSendSuper = LoadSymbolorDie(ObjCRuntime, "objc_msgSendSuper");
   objc_registerClassPair = LoadSymbolorDie(ObjCRuntime, "objc_registerClassPair");
   sel_registerName = LoadSymbolorDie(ObjCRuntime, "sel_registerName");
   NSBeep = LoadSymbolorDie(AppKitFramework, "NSBeep");
@@ -383,12 +394,53 @@ static void RegisterSelectors() {
   REGISTER($initWithFormat$);
   REGISTER($stringWithFormat$);
   REGISTER($setStringValue$);
+  REGISTER($keyDown$);
+  REGISTER($keyCode);
+  REGISTER($performClick$);
 #undef REGISTER
 }
 
 static void onApplicationDidFinishLaunching(id self, SEL cmd, id notification) {
   InitializeWindow();
   MSG(void, g_App, $activateIgnoringOtherApps$, true);
+}
+
+static void onWindowKeyDown(id self, SEL cmd, id event) {
+  switch (MSG(u16, event, $keyCode)) {
+    case 0x1D:
+    case 0x52:
+      return MSG(void, g_ButtonZero, $performClick$, (id)0);
+    case 0x12:
+    case 0x53:
+      return MSG(void, g_ButtonOne, $performClick$, (id)0);
+    case 0x13:
+    case 0x54:
+      return MSG(void, g_ButtonTwo, $performClick$, (id)0);
+    case 0x14:
+    case 0x55:
+      return MSG(void, g_ButtonThree, $performClick$, (id)0);
+    case 0x15:
+    case 0x56:
+      return MSG(void, g_ButtonFour, $performClick$, (id)0);
+    case 0x17:
+    case 0x57:
+      return MSG(void, g_ButtonFive, $performClick$, (id)0);
+    case 0x16:
+    case 0x58:
+      return MSG(void, g_ButtonSix, $performClick$, (id)0);
+    case 0x1A:
+    case 0x59:
+      return MSG(void, g_ButtonSeven, $performClick$, (id)0);
+    case 0x1C:
+    case 0x5B:
+      return MSG(void, g_ButtonEight, $performClick$, (id)0);
+    case 0x19:
+    case 0x5C:
+      return MSG(void, g_ButtonNine, $performClick$, (id)0);
+    default:
+      struct objc_super super = {.receiver = self, .super_class = NSWindow};
+      ((void (*)(struct objc_super*, SEL, id))objc_msgSendSuper)(&super, $keyDown$, event);
+  }
 }
 
 static void feedCmdAndUpdate(enum CalcCommand cmd) {
@@ -480,30 +532,34 @@ static void onButtonEqClicked(id self, SEL cmd, id sender) {
 }
 
 static void InitializeAppDelegate() {
-  Class class = objc_allocateClassPair(NSObject, "AppDelegate", 0);
-  class_addMethod(class, $applicationDidFinishLaunching$, (IMP)onApplicationDidFinishLaunching, "v@:@");
-  class_addMethod(class, $onButtonDeleteClicked$, (IMP)onButtonDeleteClicked, "v@:@");
-  class_addMethod(class, $onButtonClearClicked$, (IMP)onButtonClearClicked, "v@:@");
-  class_addMethod(class, $onButtonPercentClicked$, (IMP)onButtonPercentClicked, "v@:@");
-  class_addMethod(class, $onButtonDivideClicked$, (IMP)onButtonDivideClicked, "v@:@");
-  class_addMethod(class, $onButtonSevenClicked$, (IMP)onButtonSevenClicked, "v@:@");
-  class_addMethod(class, $onButtonEightClicked$, (IMP)onButtonEightClicked, "v@:@");
-  class_addMethod(class, $onButtonNineClicked$, (IMP)onButtonNineClicked, "v@:@");
-  class_addMethod(class, $onButtonMultiplyClicked$, (IMP)onButtonMultiplyClicked, "v@:@");
-  class_addMethod(class, $onButtonFourClicked$, (IMP)onButtonFourClicked, "v@:@");
-  class_addMethod(class, $onButtonFiveClicked$, (IMP)onButtonFiveClicked, "v@:@");
-  class_addMethod(class, $onButtonSixClicked$, (IMP)onButtonSixClicked, "v@:@");
-  class_addMethod(class, $onButtonMinusClicked$, (IMP)onButtonMinusClicked, "v@:@");
-  class_addMethod(class, $onButtonOneClicked$, (IMP)onButtonOneClicked, "v@:@");
-  class_addMethod(class, $onButtonTwoClicked$, (IMP)onButtonTwoClicked, "v@:@");
-  class_addMethod(class, $onButtonThreeClicked$, (IMP)onButtonThreeClicked, "v@:@");
-  class_addMethod(class, $onButtonPlusClicked$, (IMP)onButtonPlusClicked, "v@:@");
-  class_addMethod(class, $onButtonEqClicked$, (IMP)onButtonEqClicked, "v@:@");
-  class_addMethod(class, $onButtonPlusMinusClicked$, (IMP)onButtonPlusMinusClicked, "v@:@");
-  class_addMethod(class, $onButtonZeroClicked$, (IMP)onButtonZeroClicked, "v@:@");
-  class_addMethod(class, $onButtonDotClicked$, (IMP)onButtonDotClicked, "v@:@");
-  objc_registerClassPair(class);
-  g_AppDelegate = CLASS_MSG(id, class, $new);
+  g_WindowClass = objc_allocateClassPair(NSWindow, "AppWindow", 0);
+  class_addMethod(g_WindowClass, $keyDown$, (IMP)onWindowKeyDown, "v@:@");
+  objc_registerClassPair(g_WindowClass);
+
+  Class appdel = objc_allocateClassPair(NSObject, "AppDelegate", 0);
+  class_addMethod(appdel, $applicationDidFinishLaunching$, (IMP)onApplicationDidFinishLaunching, "v@:@");
+  class_addMethod(appdel, $onButtonDeleteClicked$, (IMP)onButtonDeleteClicked, "v@:@");
+  class_addMethod(appdel, $onButtonClearClicked$, (IMP)onButtonClearClicked, "v@:@");
+  class_addMethod(appdel, $onButtonPercentClicked$, (IMP)onButtonPercentClicked, "v@:@");
+  class_addMethod(appdel, $onButtonDivideClicked$, (IMP)onButtonDivideClicked, "v@:@");
+  class_addMethod(appdel, $onButtonSevenClicked$, (IMP)onButtonSevenClicked, "v@:@");
+  class_addMethod(appdel, $onButtonEightClicked$, (IMP)onButtonEightClicked, "v@:@");
+  class_addMethod(appdel, $onButtonNineClicked$, (IMP)onButtonNineClicked, "v@:@");
+  class_addMethod(appdel, $onButtonMultiplyClicked$, (IMP)onButtonMultiplyClicked, "v@:@");
+  class_addMethod(appdel, $onButtonFourClicked$, (IMP)onButtonFourClicked, "v@:@");
+  class_addMethod(appdel, $onButtonFiveClicked$, (IMP)onButtonFiveClicked, "v@:@");
+  class_addMethod(appdel, $onButtonSixClicked$, (IMP)onButtonSixClicked, "v@:@");
+  class_addMethod(appdel, $onButtonMinusClicked$, (IMP)onButtonMinusClicked, "v@:@");
+  class_addMethod(appdel, $onButtonOneClicked$, (IMP)onButtonOneClicked, "v@:@");
+  class_addMethod(appdel, $onButtonTwoClicked$, (IMP)onButtonTwoClicked, "v@:@");
+  class_addMethod(appdel, $onButtonThreeClicked$, (IMP)onButtonThreeClicked, "v@:@");
+  class_addMethod(appdel, $onButtonPlusClicked$, (IMP)onButtonPlusClicked, "v@:@");
+  class_addMethod(appdel, $onButtonEqClicked$, (IMP)onButtonEqClicked, "v@:@");
+  class_addMethod(appdel, $onButtonPlusMinusClicked$, (IMP)onButtonPlusMinusClicked, "v@:@");
+  class_addMethod(appdel, $onButtonZeroClicked$, (IMP)onButtonZeroClicked, "v@:@");
+  class_addMethod(appdel, $onButtonDotClicked$, (IMP)onButtonDotClicked, "v@:@");
+  objc_registerClassPair(appdel);
+  g_AppDelegate = CLASS_MSG(id, appdel, $new);
 }
 
 static void InitializeApplication() {
@@ -557,7 +613,7 @@ static void AddButton(id* button_target, id* button_glass_target, id parent_view
 }
 
 static void InitializeWindow() {
-  g_Window = CLASS_MSG(id, NSWindow, $alloc);
+  g_Window = CLASS_MSG(id, g_WindowClass, $alloc);
   NSRect rc = {.origin = {.x = 200, .y = 200}, .size = {.width = 300, .height = 400}};
   u64 windows_flags = (1 << 15) | (1 << 2) | (1 << 1) | (1 << 0);
   g_Window = MSG(id, g_Window, $initWithContentRect$styleMask$backing$defer$, rc, windows_flags, (u64)2, false);
@@ -712,18 +768,18 @@ static id CalcVisualize(struct Calculator* calc) {
 
 static bool CalcProcess(struct Calculator* calc, enum CalcCommand cmd) {
   switch (cmd) {
-    case CMD_0: {
-      // TODO: check if the top is a number
-      struct Number new = NumberByAppendedDigit(calc->toks[calc->toks_num - 1].number, 0);
-      if (NumberIsNAN(new))
-        return false;
-      calc->toks[calc->toks_num - 1].number = new;
-      return true;
-      break;
-    }
-    case CMD_1: {
-      // TODO: check if the top is a number
-      struct Number new = NumberByAppendedDigit(calc->toks[calc->toks_num - 1].number, 1);
+    case CMD_0:
+    case CMD_1:
+    case CMD_2:
+    case CMD_3:
+    case CMD_4:
+    case CMD_5:
+    case CMD_6:
+    case CMD_7:
+    case CMD_8:
+    case CMD_9: {
+      // TODO: check if the top is actually a number
+      struct Number new = NumberByAppendedDigit(calc->toks[calc->toks_num - 1].number, (u8)cmd);
       if (NumberIsNAN(new))
         return false;
       calc->toks[calc->toks_num - 1].number = new;
