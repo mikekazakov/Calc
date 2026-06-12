@@ -208,6 +208,7 @@ enum CalcCommand {
   CMD_7,
   CMD_8,
   CMD_9,
+  CMD_DELETE,
 };
 
 // Program state
@@ -240,25 +241,33 @@ static id g_TextCurrent;      // NSTextField
 static struct Calculator g_CurrentState;
 
 // Forward declarations
+
+// Initialization
 static void retain(id obj);
 static void release(id obj);
 static void* LoadLibraryOrDie(const char* path);
 static void* LoadSymbolorDie(void* handle, const char* symbol);
 static void LoadLibraries();
 static void RegisterSelectors();
+
+// GUI functions
 static void onApplicationDidFinishLaunching(id self, SEL cmd, id notification);
 static void onWindowKeyDown(id self, SEL cmd, id event);
 static void InitializeAppDelegate();
 static void InitializeApplication();
 static void InitializeMainMenu();
 static void InitializeWindow();
+
+// Calculator functions
 static void CalcInit(struct Calculator* calc);
 static id CalcVisualize(struct Calculator* calc);
 static bool CalcProcess(struct Calculator* calc, enum CalcCommand cmd);
 
+// Number functions
 static struct Number NumberFromU64(u64 number);
 static struct Number NumberNAN();
-static struct Number NumberByAppendedDigit(struct Number number, u8 digit);
+static struct Number NumberByAppendingDigit(struct Number number, u8 digit);
+static struct Number NumberByRemovingRightmostDigit(struct Number number);
 static id NumberToNSString(struct Number number);
 static bool NumberIsNAN(struct Number number);
 static bool NumberIsZero(struct Number number);
@@ -437,6 +446,8 @@ static void onWindowKeyDown(id self, SEL cmd, id event) {
     case 0x19:
     case 0x5C:
       return MSG(void, g_ButtonNine, $performClick$, (id)0);
+    case 0x33:
+      return MSG(void, g_ButtonDelete, $performClick$, (id)0);
     default:
       struct objc_super super = {.receiver = self, .super_class = NSWindow};
       ((void (*)(struct objc_super*, SEL, id))objc_msgSendSuper)(&super, $keyDown$, event);
@@ -452,7 +463,7 @@ static void feedCmdAndUpdate(enum CalcCommand cmd) {
 }
 
 static void onButtonDeleteClicked(id self, SEL cmd, id sender) {
-  printf("onButtonDeleteClicked\n");
+  feedCmdAndUpdate(CMD_DELETE);
 }
 
 static void onButtonClearClicked(id self, SEL cmd, id sender) {
@@ -779,14 +790,20 @@ static bool CalcProcess(struct Calculator* calc, enum CalcCommand cmd) {
     case CMD_8:
     case CMD_9: {
       // TODO: check if the top is actually a number
-      struct Number new = NumberByAppendedDigit(calc->toks[calc->toks_num - 1].number, (u8)cmd);
+      struct Number new = NumberByAppendingDigit(calc->toks[calc->toks_num - 1].number, (u8)cmd);
       if (NumberIsNAN(new))
         return false;
       calc->toks[calc->toks_num - 1].number = new;
       return true;
-      break;
     }
-
+    case CMD_DELETE: {
+      // TODO: check if the top is actually a number
+      struct Number new = NumberByRemovingRightmostDigit(calc->toks[calc->toks_num - 1].number);
+      if (NumberIsNAN(new))
+        return false;
+      calc->toks[calc->toks_num - 1].number = new;
+      return true;
+    }
     default:;
   }
   return false;
@@ -884,7 +901,7 @@ static bool NumberIsZero(struct Number number) {
   return true;
 }
 
-static struct Number NumberByAppendedDigit(struct Number number, u8 digit) {
+static struct Number NumberByAppendingDigit(struct Number number, u8 digit) {
   if (digit > 9 || NumberIsNAN(number))
     return NumberNAN();
   if (NumberIsZero(number) && number.scale == 0)
@@ -897,7 +914,7 @@ static struct Number NumberByAppendedDigit(struct Number number, u8 digit) {
   // Append a decimal digit at the right by computing mantissa = mantissa * 10 + digit.
   u32 carry = digit;
   for (u32 i = 0; i < out.len; ++i) {
-    u32 v = (u32)out.limbs[i] * 10u + carry;
+    u32 v = (u32)out.limbs[i] * 10 + carry;
     out.limbs[i] = (u16)(v % NUMBER_BASE);
     carry = v / NUMBER_BASE;
   }
@@ -915,6 +932,31 @@ static struct Number NumberByAppendedDigit(struct Number number, u8 digit) {
   }
 
   return out;
+}
+
+static struct Number NumberByRemovingRightmostDigit(struct Number number) {
+  if (NumberIsNAN(number))
+    return number;
+
+  u32 len = number.len ? number.len : 1;
+
+  u32 borrow = 0;
+  for (i32 i = (i32)len - 1; i >= 0; --i) {
+    u32 v = (u32)number.limbs[i] + borrow * NUMBER_BASE;
+    number.limbs[i] = (u16)(v / 10);
+    borrow = v % 10;
+  }
+
+  while (len > 1 && number.limbs[len - 1] == 0)
+    len--;
+
+  number.len = (u8)len;
+
+  if (number.scale > 0) {
+    number.scale -= 1;
+  }
+
+  return number;
 }
 
 int main() {
