@@ -88,8 +88,10 @@ static Class NSAppearance;
 static Class NSApplication;
 static Class NSAutoreleasePool;
 static Class NSButton;
+static Class NSColor;
 static Class NSGlassEffectContainerView;
 static Class NSGlassEffectView;
+static Class NSFont;
 static Class NSMenu;
 static Class NSMenuItem;
 static Class NSObject;
@@ -172,15 +174,24 @@ static SEL $keyDown$;
 static SEL $keyCode;
 static SEL $performClick$;
 static SEL $stringByAppendingString$;
+static SEL $setAlignment$;
+static SEL $setEditable$;
+static SEL $setBordered$;
+static SEL $setDrawsBackground$;
+static SEL $systemFontOfSize$weight$;
+static SEL $setFont$;
+static SEL $labelColor;
+static SEL $secondaryLabelColor;
+static SEL $setTextColor$;
 
 // Number
-static constexpr u64 NUMBER_BASE = 1000;
-static constexpr u64 NUMBER_MAX = 14;         // Maximum amount of 1000-based limbs in a number.
+static constexpr u64 NUMBER_BASE = 10000;
+static constexpr u64 NUMBER_MAX = 14;         // Maximum amount of 10000-based limbs in a number.
 static constexpr u8 NUMBER_FLAG_SIGN = 0x01;  // The number is negative.
 static constexpr u8 NUMBER_FLAG_NAN = 0x02;   // The number is a NaN, nothing else matters.
 static constexpr u8 NUMBER_FLAG_DOT = 0x04;   // The number should display a decimal point, regardless of the number value.
 struct Number {
-  u16 limbs[NUMBER_MAX];  // 1000-based digits
+  u16 limbs[NUMBER_MAX];  // 10000-based digits
   u8 len;                 // len
   u8 scale;               // scale of number, i.e. x 10^(-scale)
   u8 flags;
@@ -244,7 +255,9 @@ static id g_ButtonZero;       // NSButton
 static id g_ButtonDot;        // NSButton
 static id g_ButtonEq;         // NSButton
 static id g_TextCurrent;      // NSTextField
+static id g_TextPrevious;     // NSTextField
 static struct Calculator g_CurrentState;
+static struct Calculator g_PreviousState;
 
 // Forward declarations
 
@@ -282,6 +295,8 @@ static id NumberToNSString(struct Number number);
 static u64 NumberOccupiedSymbols(struct Number number);
 static bool NumberIsNAN(struct Number number);
 static bool NumberIsZero(struct Number number);
+
+#pragma mark Initialization
 
 static void retain(id obj) {
   MSG(void, obj, $retain);
@@ -324,8 +339,10 @@ static void LoadLibraries() {
   LOAD_CLASS(NSApplication);
   LOAD_CLASS(NSAutoreleasePool);
   LOAD_CLASS(NSButton);
+  LOAD_CLASS(NSColor);
   LOAD_CLASS(NSGlassEffectContainerView);
   LOAD_CLASS(NSGlassEffectView);
+  LOAD_CLASS(NSFont);
   LOAD_CLASS(NSMenu);
   LOAD_CLASS(NSMenuItem);
   LOAD_CLASS(NSObject);
@@ -418,8 +435,19 @@ static void RegisterSelectors() {
   REGISTER($keyCode);
   REGISTER($performClick$);
   REGISTER($stringByAppendingString$);
+  REGISTER($setAlignment$);
+  REGISTER($setEditable$);
+  REGISTER($setBordered$);
+  REGISTER($setDrawsBackground$);
+  REGISTER($systemFontOfSize$weight$);
+  REGISTER($setFont$);
+  REGISTER($labelColor);
+  REGISTER($secondaryLabelColor);
+  REGISTER($setTextColor$);
 #undef REGISTER
 }
+
+#pragma mark GUI - Implementation
 
 static void onApplicationDidFinishLaunching(id self, SEL cmd, id notification) {
   InitializeWindow();
@@ -466,6 +494,8 @@ static void onWindowKeyDown(id self, SEL cmd, id event) {
       return MSG(void, g_ButtonDot, $performClick$, (id)0);
     case 0x45:
       return MSG(void, g_ButtonPlus, $performClick$, (id)0);
+    case 0x4C:
+      return MSG(void, g_ButtonEq, $performClick$, (id)0);
     default:
       struct objc_super super = {.receiver = self, .super_class = NSWindow};
       ((void (*)(struct objc_super*, SEL, id))objc_msgSendSuper)(&super, $keyDown$, event);
@@ -473,10 +503,24 @@ static void onWindowKeyDown(id self, SEL cmd, id event) {
 }
 
 static void feedCmdAndUpdate(enum CalcCommand cmd) {
-  if (CalcProcess(&g_CurrentState, cmd)) {
-    MSG(void, g_TextCurrent, $setStringValue$, CalcVisualize(&g_CurrentState));
+  if (cmd == CMD_EVAL) {
+    struct Number result = CalcEval(&g_CurrentState);
+    if (!NumberIsNAN(result)) {
+      g_PreviousState = g_CurrentState;
+      g_CurrentState.toks_num = 1;
+      g_CurrentState.toks[0].type = TOK_NUM;
+      g_CurrentState.toks[0].number = result;
+      MSG(void, g_TextCurrent, $setStringValue$, CalcVisualize(&g_CurrentState));
+      MSG(void, g_TextPrevious, $setStringValue$, CalcVisualize(&g_PreviousState));
+    } else {
+      NSBeep();
+    }
   } else {
-    NSBeep();
+    if (CalcProcess(&g_CurrentState, cmd)) {
+      MSG(void, g_TextCurrent, $setStringValue$, CalcVisualize(&g_CurrentState));
+    } else {
+      NSBeep();
+    }
   }
 }
 
@@ -730,10 +774,29 @@ static void InitializeWindow() {
   g_TextCurrent = CLASS_MSG(id, NSTextField, $new);
   MSG(void, g_TextCurrent, $setTranslatesAutoresizingMaskIntoConstraints$, false);
   MSG(void, g_TextCurrent, $setRefusesFirstResponder$, true);
+  MSG(void, g_TextCurrent, $setAlignment$, (i64)2);
+  MSG(void, g_TextCurrent, $setEditable$, false);
+  MSG(void, g_TextCurrent, $setBordered$, false);
+  MSG(void, g_TextCurrent, $setDrawsBackground$, false);
+  MSG(void, g_TextCurrent, $setFont$, CLASS_MSG(id, NSFont, $systemFontOfSize$weight$, 30., 0.));
+  MSG(void, g_TextCurrent, $setTextColor$, CLASS_MSG(id, NSColor, $labelColor));
   MSG(void, cv, $addSubview$, g_TextCurrent);
-
   MSG(void, g_TextCurrent, $setStringValue$, CalcVisualize(&g_CurrentState));
 
+  g_TextPrevious = CLASS_MSG(id, NSTextField, $new);
+  MSG(void, g_TextPrevious, $setTranslatesAutoresizingMaskIntoConstraints$, false);
+  MSG(void, g_TextPrevious, $setRefusesFirstResponder$, true);
+  MSG(void, g_TextPrevious, $setAlignment$, (i64)2);
+  MSG(void, g_TextPrevious, $setEditable$, false);
+  MSG(void, g_TextPrevious, $setBordered$, false);
+  MSG(void, g_TextPrevious, $setDrawsBackground$, false);
+  MSG(void, g_TextPrevious, $setFont$, CLASS_MSG(id, NSFont, $systemFontOfSize$weight$, 22., 0.));
+  MSG(void, g_TextPrevious, $setTextColor$, CLASS_MSG(id, NSColor, $secondaryLabelColor));
+  MSG(void, cv, $addSubview$, g_TextPrevious);
+
+  MSG(void, MSG(id, MSG(id, MSG(id, g_TextPrevious, $bottomAnchor), $anchorWithOffsetToAnchor$, MSG(id, g_TextCurrent, $topAnchor)), $constraintEqualToConstant$, 6.), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, cv_lead_anch, $anchorWithOffsetToAnchor$, MSG(id, g_TextPrevious, $leadingAnchor)), $constraintEqualToConstant$, 20.), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, MSG(id, g_TextPrevious, $trailingAnchor), $anchorWithOffsetToAnchor$, cv_trail_anch), $constraintEqualToConstant$, 20.), $setActive$, true);
   MSG(void, MSG(id, MSG(id, MSG(id, g_TextCurrent, $bottomAnchor), $anchorWithOffsetToAnchor$, MSG(id, delete_gl, $topAnchor)), $constraintEqualToConstant$, 6.), $setActive$, true);
   MSG(void, MSG(id, MSG(id, cv_lead_anch, $anchorWithOffsetToAnchor$, MSG(id, g_TextCurrent, $leadingAnchor)), $constraintEqualToConstant$, 20.), $setActive$, true);
   MSG(void, MSG(id, MSG(id, MSG(id, g_TextCurrent, $trailingAnchor), $anchorWithOffsetToAnchor$, cv_trail_anch), $constraintEqualToConstant$, 20.), $setActive$, true);
@@ -783,6 +846,8 @@ static void InitializeWindow() {
   MSG(void, glass_container_view, $release);
   MSG(void, cv, $release);
 }
+
+#pragma mark Calculator - Implementation
 
 static void CalcInit(struct Calculator* calc) {
   calc->toks[0].type = TOK_NUM;
@@ -898,6 +963,8 @@ static struct Number CalcEval(struct Calculator* calc) {
   return acc;
 }
 
+#pragma mark Number - Implementation
+
 static struct Number NumberFromU64(u64 number) {
   struct Number r = {0};
   if (number == 0) {
@@ -929,7 +996,12 @@ static id NumberToNSString(struct Number number) {
     len = 1;
   u32 dp = 0;
   u16 top = number.limbs[len - 1];
-  if (top >= 100) {
+  if (top >= 1000) {
+    digits[dp++] = (char)('0' + (top / 1000));
+    digits[dp++] = (char)('0' + (top / 100) % 10);
+    digits[dp++] = (char)('0' + ((top / 10) % 10));
+    digits[dp++] = (char)('0' + (top % 10));
+  } else if (top >= 100) {
     digits[dp++] = (char)('0' + (top / 100));
     digits[dp++] = (char)('0' + ((top / 10) % 10));
     digits[dp++] = (char)('0' + (top % 10));
@@ -942,7 +1014,8 @@ static id NumberToNSString(struct Number number) {
 
   for (i32 i = (i32)len - 2; i >= 0; --i) {
     u16 limb = number.limbs[i];
-    digits[dp++] = (char)('0' + (limb / 100));
+    digits[dp++] = (char)('0' + (limb / 1000));
+    digits[dp++] = (char)('0' + (limb / 100) % 10);
     digits[dp++] = (char)('0' + ((limb / 10) % 10));
     digits[dp++] = (char)('0' + (limb % 10));
   }
@@ -1178,6 +1251,8 @@ static struct Number NumberByAddingNumber(struct Number left, struct Number righ
 
   return left;
 }
+
+#pragma mark Main
 
 int main() {
   LoadLibraries();
