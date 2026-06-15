@@ -186,16 +186,16 @@ static SEL $setTextColor$;
 
 // Number
 static constexpr u64 NUMBER_BASE = 10000;
-static constexpr u64 NUMBER_MAX = 14;         // Maximum amount of 10000-based limbs in a number.
+static constexpr u64 NUMBER_LIMBS = 7;        // Maximum amount of 10000-based limbs in a number.
 static constexpr u8 NUMBER_FLAG_SIGN = 0x01;  // The number is negative.
 static constexpr u8 NUMBER_FLAG_NAN = 0x02;   // The number is a NaN, nothing else matters.
 static constexpr u8 NUMBER_FLAG_DOT = 0x04;   // The number should display a decimal point, regardless of the number value.
 struct Number {
-  u16 limbs[NUMBER_MAX];  // 10000-based digits
-  u8 len;                 // len
-  u8 scale;               // scale of number, i.e. x 10^(-scale)
+  u16 limbs[NUMBER_LIMBS];  // 10000-based digits
+  u8 scale;                 // 10-based scale of number, i.e. real number = stored number x 10^(-scale)
   u8 flags;
 };
+static_assert(sizeof(struct Number) == 16, "Number shall be 16 bytes long");
 
 // Calculator
 static constexpr u64 MAX_TOKENS = 64;
@@ -293,6 +293,7 @@ static struct Number NumberByExtendingScaleTo(struct Number number, u8 scale);
 static struct Number NumberByAddingNumber(struct Number left, struct Number right);
 static id NumberToNSString(struct Number number);
 static u64 NumberOccupiedSymbols(struct Number number);
+static u64 NumberLimbsInUse(struct Number number);
 static bool NumberIsNAN(struct Number number);
 static bool NumberIsZero(struct Number number);
 
@@ -968,11 +969,11 @@ static struct Number CalcEval(struct Calculator* calc) {
 static struct Number NumberFromU64(u64 number) {
   struct Number r = {0};
   if (number == 0) {
-    r.len = 1;
     return r;
   }
+  u64 limb = 0;
   while (number != 0) {
-    r.limbs[r.len++] = number % NUMBER_BASE;
+    r.limbs[limb++] = number % NUMBER_BASE;
     number = number / NUMBER_BASE;
   }
   return r;
@@ -980,7 +981,6 @@ static struct Number NumberFromU64(u64 number) {
 
 static struct Number NumberNAN() {
   struct Number nan = {0};
-  nan.len = 1;
   nan.flags = NUMBER_FLAG_NAN;
   return nan;
 }
@@ -991,7 +991,7 @@ static id NumberToNSString(struct Number number) {
 
   // First grab the digits into a temporary buffer
   char digits[64] = {0};
-  u8 len = number.len;
+  u8 len = NumberLimbsInUse(number);
   if (len == 0)
     len = 1;
   u32 dp = 0;
@@ -1060,6 +1060,13 @@ static u64 NumberOccupiedSymbols(struct Number number) {
   return MSG(u64, string, $length);
 }
 
+static u64 NumberLimbsInUse(struct Number number) {
+  for (i64 idx = NUMBER_LIMBS - 1; idx >= 0; --idx)
+    if (number.limbs[idx] != 0)
+      return (u64)idx + 1;
+  return 0;
+}
+
 static bool NumberIsNAN(struct Number number) {
   return number.flags & NUMBER_FLAG_NAN;
 }
@@ -1067,7 +1074,7 @@ static bool NumberIsNAN(struct Number number) {
 static bool NumberIsZero(struct Number number) {
   if (NumberIsNAN(number))
     return false;
-  for (u32 i = 0; i < number.len; ++i)
+  for (u32 i = 0; i < NUMBER_LIMBS; ++i)
     if (number.limbs[i] != 0)
       return false;
   return true;
@@ -1080,21 +1087,20 @@ static struct Number NumberByAppendingDigit(struct Number number, u8 digit) {
     return NumberFromU64(digit);
 
   struct Number out = number;
-  if (out.len == 0)
-    out.len = 1;
+  u64 limbs = NumberLimbsInUse(number);
 
   // Append a decimal digit at the right by computing mantissa = mantissa * 10 + digit.
   u32 carry = digit;
-  for (u32 i = 0; i < out.len; ++i) {
+  for (u32 i = 0; i < limbs; ++i) {
     u32 v = (u32)out.limbs[i] * 10 + carry;
     out.limbs[i] = (u16)(v % NUMBER_BASE);
     carry = v / NUMBER_BASE;
   }
 
   if (carry != 0) {
-    if (out.len >= NUMBER_MAX)
+    if (limbs == NUMBER_LIMBS)
       return NumberNAN();
-    out.limbs[out.len++] = (u16)(carry % NUMBER_BASE);
+    out.limbs[limbs] = (u16)(carry % NUMBER_BASE);
   }
 
   if (out.scale != 0 || (out.flags & NUMBER_FLAG_DOT)) {
@@ -1115,19 +1121,14 @@ static struct Number NumberByRemovingRightmostSymbol(struct Number number) {
     return number;
   }
 
-  u32 len = number.len ? number.len : 1;
+  u64 len = NumberLimbsInUse(number);
 
   u32 borrow = 0;
-  for (i32 i = (i32)len - 1; i >= 0; --i) {
+  for (i64 i = (i64)len - 1; i >= 0; --i) {
     u32 v = (u32)number.limbs[i] + borrow * NUMBER_BASE;
     number.limbs[i] = (u16)(v / 10);
     borrow = v % 10;
   }
-
-  while (len > 1 && number.limbs[len - 1] == 0)
-    len--;
-
-  number.len = (u8)len;
 
   if (number.scale > 0) {
     number.scale -= 1;
@@ -1153,17 +1154,16 @@ static struct Number NumberByExtendingScaleTo(struct Number number, u8 scale) {
 
   while (number.scale < scale) {
     u32 carry = 0;
-    u32 len = number.len ? number.len : 1;
-    for (u32 i = 0; i < len; ++i) {
+    u64 len = NumberLimbsInUse(number);
+    for (u64 i = 0; i < len; ++i) {
       u32 v = (u32)number.limbs[i] * 10 + carry;
       number.limbs[i] = (u16)(v % NUMBER_BASE);
       carry = v / NUMBER_BASE;
     }
     if (carry != 0) {
-      if (len >= NUMBER_MAX)
+      if (len == NUMBER_LIMBS)
         return NumberNAN();
-      number.limbs[len++] = (u16)carry;
-      number.len = (u8)len;
+      number.limbs[len] = (u16)carry;
     }
     number.scale += 1;
   }
@@ -1188,10 +1188,12 @@ static struct Number NumberByAddingNumber(struct Number left, struct Number righ
     result_neg = left_neg;
   } else {
     i32 cmp = 0;
-    if (left.len != right.len) {
-      cmp = left.len > right.len ? 1 : -1;
+    u64 left_limbs = NumberLimbsInUse(left);
+    u64 right_limbs = NumberLimbsInUse(right);
+    if (left_limbs != right_limbs) {
+      cmp = left_limbs > right_limbs ? 1 : -1;
     } else {
-      for (i32 i = (i32)left.len - 1; i >= 0; --i) {
+      for (i64 i = (i64)left_limbs - 1; i >= 0; --i) {
         if (left.limbs[i] != right.limbs[i]) {
           cmp = left.limbs[i] > right.limbs[i] ? 1 : -1;
           break;
@@ -1206,28 +1208,28 @@ static struct Number NumberByAddingNumber(struct Number left, struct Number righ
     }
   }
 
-  u32 max_len = left.len > right.len ? left.len : right.len;
+  u64 left_limbs = NumberLimbsInUse(left);
+  u64 right_limbs = NumberLimbsInUse(right);
+  u64 max_len = left_limbs > right_limbs ? left_limbs : right_limbs;
   if (perform_add) {  // left += right
     u32 carry = 0;
     for (u32 i = 0; i < max_len; ++i) {
-      u32 l = i < left.len ? left.limbs[i] : 0;
-      u32 r = i < right.len ? right.limbs[i] : 0;
+      u32 l = left.limbs[i];
+      u32 r = right.limbs[i];
       u32 sum = l + r + carry;
       left.limbs[i] = (u16)(sum % NUMBER_BASE);
       carry = sum / NUMBER_BASE;
     }
-    left.len = (u8)max_len;
     if (carry != 0) {
-      if (left.len == NUMBER_MAX)
+      if (max_len == NUMBER_LIMBS)
         return NumberNAN();
-      left.limbs[left.len] = (u16)carry;
-      left.len++;
+      left.limbs[max_len] = (u16)carry;
     }
   } else {  // left -= right
     i32 borrow = 0;
     for (u32 i = 0; i < max_len; ++i) {
-      i32 l = i < left.len ? left.limbs[i] : 0;
-      i32 r = i < right.len ? right.limbs[i] : 0;
+      i32 l = left.limbs[i];
+      i32 r = right.limbs[i];
       i32 diff = l - r - borrow;
       if (diff < 0) {
         diff += NUMBER_BASE;
@@ -1239,7 +1241,6 @@ static struct Number NumberByAddingNumber(struct Number left, struct Number righ
     }
     while (max_len > 1 && left.limbs[max_len - 1] == 0)
       max_len--;
-    left.len = (u8)max_len;
   }
 
   left.scale = max_scale;
