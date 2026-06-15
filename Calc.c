@@ -1,3 +1,5 @@
+#define TEST
+
 typedef signed char i8;
 typedef unsigned char u8;
 typedef short i16;
@@ -268,6 +270,7 @@ static void* LoadLibraryOrDie(const char* path);
 static void* LoadSymbolorDie(void* handle, const char* symbol);
 static void LoadLibraries();
 static void RegisterSelectors();
+static void Test();
 
 // GUI functions
 static void onApplicationDidFinishLaunching(id self, SEL cmd, id notification);
@@ -296,6 +299,7 @@ static u64 NumberOccupiedSymbols(struct Number number);
 static u64 NumberLimbsInUse(struct Number number);
 static bool NumberIsNAN(struct Number number);
 static bool NumberIsZero(struct Number number);
+static bool NumberIsBitwiseEqual(struct Number left, struct Number right);
 
 #pragma mark Initialization
 
@@ -968,9 +972,6 @@ static struct Number CalcEval(struct Calculator* calc) {
 
 static struct Number NumberFromU64(u64 number) {
   struct Number r = {0};
-  if (number == 0) {
-    return r;
-  }
   u64 limb = 0;
   while (number != 0) {
     r.limbs[limb++] = number % NUMBER_BASE;
@@ -1078,6 +1079,12 @@ static bool NumberIsZero(struct Number number) {
     if (number.limbs[i] != 0)
       return false;
   return true;
+}
+
+static bool NumberIsBitwiseEqual(struct Number left, struct Number right) {
+  u64* l = (u64*)(&left);
+  u64* r = (u64*)(&right);
+  return l[0] == r[0] && l[1] == r[1];
 }
 
 static struct Number NumberByAppendingDigit(struct Number number, u8 digit) {
@@ -1259,6 +1266,7 @@ int main() {
   LoadLibraries();
   RegisterSelectors();
   void* autorelease_pool = objc_autoreleasePoolPush();
+  Test();
   CalcInit(&g_CurrentState);
   InitializeAppDelegate();
   InitializeApplication();
@@ -1266,3 +1274,35 @@ int main() {
   MSG(void, g_App, $run);
   objc_autoreleasePoolPop(autorelease_pool);
 }
+
+#pragma mark Tests
+
+#ifdef TEST
+
+static void assert_fail(const char* expr, int line) {
+  printf("Assertion failed: %s, line %d\n", expr, line);
+  __builtin_trap();
+}
+#define assert(EXPR) ((void)((EXPR) || (assert_fail(#EXPR, __LINE__), 0)))
+
+static void TestNumberFromU64() {
+  typedef struct Number Number;
+  assert(NumberIsBitwiseEqual(NumberFromU64(0), (Number){.limbs = {0}, .scale = 0, .flags = 0}));
+  assert(NumberIsBitwiseEqual(NumberFromU64(1), (Number){.limbs = {1, 0, 0, 0, 0, 0, 0}, .scale = 0, .flags = 0}));
+  assert(NumberIsBitwiseEqual(NumberFromU64(9999), (Number){.limbs = {9999, 0, 0, 0, 0, 0, 0}, .scale = 0, .flags = 0}));
+  assert(NumberIsBitwiseEqual(NumberFromU64(10000), (Number){.limbs = {0, 1, 0, 0, 0, 0, 0}, .scale = 0, .flags = 0}));
+  assert(NumberIsBitwiseEqual(NumberFromU64(10001), (Number){.limbs = {1, 1, 0, 0, 0, 0, 0}, .scale = 0, .flags = 0}));
+  assert(NumberIsBitwiseEqual(NumberFromU64(10000000000000000000ULL), (Number){.limbs = {0, 0, 0, 0, 1000, 0, 0}, .scale = 0, .flags = 0}));
+  assert(NumberIsBitwiseEqual(NumberFromU64(18446744073709551615ULL), (Number){.limbs = {1615, 955, 737, 6744, 1844, 0, 0}, .scale = 0, .flags = 0}));
+}
+
+static void Test() {
+  // Number
+  TestNumberFromU64();
+}
+
+#else
+
+static void Test() {}
+
+#endif
