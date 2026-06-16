@@ -93,6 +93,8 @@ static Class NSButton;
 static Class NSColor;
 static Class NSGlassEffectContainerView;
 static Class NSGlassEffectView;
+static Class NSImage;
+static Class NSImageSymbolConfiguration;
 static Class NSFont;
 static Class NSMenu;
 static Class NSMenuItem;
@@ -191,6 +193,10 @@ static SEL $setUsesSingleLineMode$;
 static SEL $systemOrangeColor;
 static SEL $systemGrayColor;
 static SEL $setTintColor$;
+static SEL $imageWithSystemSymbolName$accessibilityDescription$;
+static SEL $configurationWithPointSize$weight$;
+static SEL $setImage$;
+static SEL $imageWithSymbolConfiguration$;
 
 // Number
 static constexpr u64 NUMBER_BASE = 10000;
@@ -354,6 +360,8 @@ static void LoadLibraries() {
   LOAD_CLASS(NSColor);
   LOAD_CLASS(NSGlassEffectContainerView);
   LOAD_CLASS(NSGlassEffectView);
+  LOAD_CLASS(NSImage);
+  LOAD_CLASS(NSImageSymbolConfiguration);
   LOAD_CLASS(NSFont);
   LOAD_CLASS(NSMenu);
   LOAD_CLASS(NSMenuItem);
@@ -462,6 +470,10 @@ static void RegisterSelectors() {
   REGISTER($systemOrangeColor);
   REGISTER($setTintColor$);
   REGISTER($systemGrayColor);
+  REGISTER($imageWithSystemSymbolName$accessibilityDescription$);
+  REGISTER($setImage$);
+  REGISTER($imageWithSymbolConfiguration$);
+  REGISTER($configurationWithPointSize$weight$);
 #undef REGISTER
 }
 
@@ -694,6 +706,7 @@ static void AddButton(id* button_target, id* button_glass_target, id parent_view
   MSG(void, button, $setTranslatesAutoresizingMaskIntoConstraints$, false);
   MSG(void, button, $setBezelStyle$, (u64)7);
   MSG(void, button, $setRefusesFirstResponder$, true);
+  MSG(void, button, $setFont$, CLASS_MSG(id, NSFont, $systemFontOfSize$weight$, 24., 0.));
   MSG(void, glass_effect_view, $setContentView$, button);
 
   MSG(void, MSG(id, MSG(id, glass_effect_view, $widthAnchor), $constraintEqualToConstant$, 48.), $setActive$, true);
@@ -729,21 +742,32 @@ static void InitializeWindow() {
   id cv_trail_anch = MSG(id, cv, $trailingAnchor);
   id cv_bott_anch = MSG(id, cv, $bottomAnchor);
 
+  id symbol_image_config = CLASS_MSG(id, NSImageSymbolConfiguration, $configurationWithPointSize$weight$, 22., 0.);
+
   id delete_gl = nullptr;
-  AddButton(&g_ButtonDelete, &delete_gl, cv, "<", $onButtonDeleteClicked$);
+  AddButton(&g_ButtonDelete, &delete_gl, cv, "", $onButtonDeleteClicked$);
   MSG(void, delete_gl, $setTintColor$, CLASS_MSG(id, NSColor, $systemGrayColor));
+  MSG(void, g_ButtonDelete, $setImage$,
+      MSG(id, CLASS_MSG(id, NSImage, $imageWithSystemSymbolName$accessibilityDescription$, CLASS_MSG(id, NSString, $stringWithUTF8String$, "delete.left"), nullptr), $imageWithSymbolConfiguration$,
+          symbol_image_config));
 
   id clear_gl = nullptr;
   AddButton(&g_ButtonClear, &clear_gl, cv, "C", $onButtonClearClicked$);
   MSG(void, clear_gl, $setTintColor$, CLASS_MSG(id, NSColor, $systemGrayColor));
 
   id percent_gl = nullptr;
-  AddButton(&g_ButtonPercent, &percent_gl, cv, "%", $onButtonPercentClicked$);
+  AddButton(&g_ButtonPercent, &percent_gl, cv, "", $onButtonPercentClicked$);
   MSG(void, percent_gl, $setTintColor$, CLASS_MSG(id, NSColor, $systemGrayColor));
+  MSG(void, g_ButtonPercent, $setImage$,
+      MSG(id, CLASS_MSG(id, NSImage, $imageWithSystemSymbolName$accessibilityDescription$, CLASS_MSG(id, NSString, $stringWithUTF8String$, "percent"), nullptr), $imageWithSymbolConfiguration$,
+          symbol_image_config));
 
   id divide_gl = nullptr;
-  AddButton(&g_ButtonDivide, &divide_gl, cv, "/", $onButtonDivideClicked$);
+  AddButton(&g_ButtonDivide, &divide_gl, cv, "", $onButtonDivideClicked$);
   MSG(void, divide_gl, $setTintColor$, CLASS_MSG(id, NSColor, $systemOrangeColor));
+  MSG(void, g_ButtonDivide, $setImage$,
+      MSG(id, CLASS_MSG(id, NSImage, $imageWithSystemSymbolName$accessibilityDescription$, CLASS_MSG(id, NSString, $stringWithUTF8String$, "divide"), nullptr), $imageWithSymbolConfiguration$,
+          symbol_image_config));
 
   id seven_gl = nullptr;
   AddButton(&g_ButtonSeven, &seven_gl, cv, "7", $onButtonSevenClicked$);
@@ -755,8 +779,11 @@ static void InitializeWindow() {
   AddButton(&g_ButtonNine, &nine_gl, cv, "9", $onButtonNineClicked$);
 
   id multiply_gl = nullptr;
-  AddButton(&g_ButtonMultiply, &multiply_gl, cv, "x", $onButtonMultiplyClicked$);
+  AddButton(&g_ButtonMultiply, &multiply_gl, cv, "", $onButtonMultiplyClicked$);
   MSG(void, multiply_gl, $setTintColor$, CLASS_MSG(id, NSColor, $systemOrangeColor));
+  MSG(void, g_ButtonMultiply, $setImage$,
+      MSG(id, CLASS_MSG(id, NSImage, $imageWithSystemSymbolName$accessibilityDescription$, CLASS_MSG(id, NSString, $stringWithUTF8String$, "multiply"), nullptr), $imageWithSymbolConfiguration$,
+          symbol_image_config));
 
   id four_gl = nullptr;
   AddButton(&g_ButtonFour, &four_gl, cv, "4", $onButtonFourClicked$);
@@ -768,8 +795,11 @@ static void InitializeWindow() {
   AddButton(&g_ButtonSix, &six_gl, cv, "6", $onButtonSixClicked$);
 
   id minus_gl = nullptr;
-  AddButton(&g_ButtonMinus, &minus_gl, cv, "-", $onButtonMinusClicked$);
+  AddButton(&g_ButtonMinus, &minus_gl, cv, "", $onButtonMinusClicked$);
   MSG(void, minus_gl, $setTintColor$, CLASS_MSG(id, NSColor, $systemOrangeColor));
+  MSG(void, g_ButtonMinus, $setImage$,
+      MSG(id, CLASS_MSG(id, NSImage, $imageWithSystemSymbolName$accessibilityDescription$, CLASS_MSG(id, NSString, $stringWithUTF8String$, "minus"), nullptr), $imageWithSymbolConfiguration$,
+          symbol_image_config));
 
   id one_gl = nullptr;
   AddButton(&g_ButtonOne, &one_gl, cv, "1", $onButtonOneClicked$);
@@ -781,11 +811,17 @@ static void InitializeWindow() {
   AddButton(&g_ButtonThree, &three_gl, cv, "3", $onButtonThreeClicked$);
 
   id plus_gl = nullptr;
-  AddButton(&g_ButtonPlus, &plus_gl, cv, "+", $onButtonPlusClicked$);
+  AddButton(&g_ButtonPlus, &plus_gl, cv, "", $onButtonPlusClicked$);
   MSG(void, plus_gl, $setTintColor$, CLASS_MSG(id, NSColor, $systemOrangeColor));
+  MSG(void, g_ButtonPlus, $setImage$,
+      MSG(id, CLASS_MSG(id, NSImage, $imageWithSystemSymbolName$accessibilityDescription$, CLASS_MSG(id, NSString, $stringWithUTF8String$, "plus"), nullptr), $imageWithSymbolConfiguration$,
+          symbol_image_config));
 
   id plus_minus_gl = nullptr;
-  AddButton(&g_ButtonPlusMinus, &plus_minus_gl, cv, "+-", $onButtonPlusMinusClicked$);
+  AddButton(&g_ButtonPlusMinus, &plus_minus_gl, cv, "", $onButtonPlusMinusClicked$);
+  MSG(void, g_ButtonPlusMinus, $setImage$,
+      MSG(id, CLASS_MSG(id, NSImage, $imageWithSystemSymbolName$accessibilityDescription$, CLASS_MSG(id, NSString, $stringWithUTF8String$, "plus.forwardslash.minus"), nullptr),
+          $imageWithSymbolConfiguration$, symbol_image_config));
 
   id zero_gl = nullptr;
   AddButton(&g_ButtonZero, &zero_gl, cv, "0", $onButtonZeroClicked$);
@@ -794,8 +830,11 @@ static void InitializeWindow() {
   AddButton(&g_ButtonDot, &dot_gl, cv, ".", $onButtonDotClicked$);
 
   id eq_gl = nullptr;
-  AddButton(&g_ButtonEq, &eq_gl, cv, "=", $onButtonEqClicked$);
+  AddButton(&g_ButtonEq, &eq_gl, cv, "", $onButtonEqClicked$);
   MSG(void, eq_gl, $setTintColor$, CLASS_MSG(id, NSColor, $systemOrangeColor));
+  MSG(void, g_ButtonEq, $setImage$,
+      MSG(id, CLASS_MSG(id, NSImage, $imageWithSystemSymbolName$accessibilityDescription$, CLASS_MSG(id, NSString, $stringWithUTF8String$, "equal"), nullptr), $imageWithSymbolConfiguration$,
+          symbol_image_config));
 
   g_TextCurrent = CLASS_MSG(id, NSTextField, $new);
   MSG(void, g_TextCurrent, $setTranslatesAutoresizingMaskIntoConstraints$, false);
@@ -883,7 +922,7 @@ static void InitializeWindow() {
 
 static void CalcInit(struct Calculator* calc) {
   calc->toks[0].type = TOK_NUM;
-  calc->toks[0].number = NumberFromU64(42);
+  calc->toks[0].number = NumberFromU64(0);
   calc->toks_num = 1;
 }
 
@@ -1382,6 +1421,8 @@ static void TestNumberByAddingNumber() {
   A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {0, 5000}, .s = 0, .f = 0}, (N){.l = {1}, .s = 0, .f = NUMBER_FLAG_SIGN}), (N){.l = {9999, 4999}, .s = 0, .f = 0}));
   // 9999'0000'0000'0000'0000'0000'0000 + 1'0000'0000'0000'0000'0000'0000 = NaN
   A(NumberIsNAN(NumberByAddingNumber((N){.l = {0, 0, 0, 0, 0, 0, 9999}, .s = 0, .f = 0}, (N){.l = {0, 0, 0, 0, 0, 0, 1}, .s = 0, .f = 0})));
+  // 8999'9999'9999'9999'9999'9999'9999 + 1 = 9000'0000'0000'0000'0000'0000'0000
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {9999, 9999, 9999, 9999, 9999, 9999, 8999}}, (N){.l = {1}}), (N){.l = {0, 0, 0, 0, 0, 0, 9000}}));
   // 10000 + -10000 = 0
   A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {0, 1}, .s = 0, .f = 0}, (N){.l = {0, 1}, .s = 0, .f = NUMBER_FLAG_SIGN}), (N){.l = {0}, .s = 0, .f = 0}));
   // 5 + -5 = 0
