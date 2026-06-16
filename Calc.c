@@ -215,7 +215,8 @@ static_assert(sizeof(Number) == 16, "Number shall be 16 bytes long");
 static constexpr u64 MAX_TOKENS = 64;
 enum TokenType {
   TOK_NUM,  // holds a number
-  TOK_ADD   // holds an addition operator
+  TOK_ADD,  // holds an addition operator
+  TOK_SUB   // holds a subtraction operator
 };
 struct Token {
   enum TokenType type;
@@ -240,6 +241,7 @@ enum CalcCommand {
   CMD_CLEAR,
   CMD_DOT,
   CMD_PLUS,
+  CMD_MINUS,
   CMD_EVAL,
 };
 
@@ -524,6 +526,8 @@ static void onWindowKeyDown(id self, SEL cmd, id event) {
       return MSG(void, g_ButtonDot, $performClick$, (id)0);
     case 0x45:
       return MSG(void, g_ButtonPlus, $performClick$, (id)0);
+    case 0x4E:
+      return MSG(void, g_ButtonMinus, $performClick$, (id)0);
     case 0x4C:
     case 0x51:
       return MSG(void, g_ButtonEq, $performClick$, (id)0);
@@ -603,7 +607,7 @@ static void onButtonSixClicked(id self, SEL cmd, id sender) {
 }
 
 static void onButtonMinusClicked(id self, SEL cmd, id sender) {
-  printf("onButtonMinusClicked\n");
+  feedCmdAndUpdate(CMD_MINUS);
 }
 
 static void onButtonOneClicked(id self, SEL cmd, id sender) {
@@ -944,6 +948,11 @@ static id CalcVisualize(struct Calculator* calc) {
         str = MSG(id, str, $stringByAppendingString$, tok_str);
         break;
       }
+      case TOK_SUB: {
+        id tok_str = CLASS_MSG(id, NSString, $stringWithUTF8String$, "-");
+        str = MSG(id, str, $stringByAppendingString$, tok_str);
+        break;
+      }
     }
   }
   return str;
@@ -994,9 +1003,9 @@ static bool CalcProcess(struct Calculator* calc, enum CalcCommand cmd) {
       }
     }
     case CMD_CLEAR: {
-      if (calc->toks_num > 1 && calc->toks[calc->toks_num - 1].type == TOK_NUM) { // e.g. 10 + 5 Esc -> 10 +        
+      if (calc->toks_num > 1 && calc->toks[calc->toks_num - 1].type == TOK_NUM) {  // e.g. 10 + 5 Esc -> 10 +
         calc->toks_num--;
-      } else { // e.g. 10 + Esc -> 0
+      } else {  // e.g. 10 + Esc -> 0
         calc->toks_num = 1;
         calc->toks[0].type = TOK_NUM;
         calc->toks[0].number = NumberFromU64(0);
@@ -1023,6 +1032,17 @@ static bool CalcProcess(struct Calculator* calc, enum CalcCommand cmd) {
       calc->toks_num++;
       return true;
     }
+    case CMD_MINUS: {
+      if (calc->toks_num == MAX_TOKENS)
+        return false;
+      if (calc->toks[calc->toks_num - 1].type == TOK_SUB)
+        return true;
+      if (calc->toks[calc->toks_num - 1].type != TOK_NUM)
+        return false;
+      calc->toks[calc->toks_num].type = TOK_SUB;
+      calc->toks_num++;
+      return true;
+    }
     case CMD_EVAL: {
       Number result = CalcEval(calc);
       if (NumberIsNAN(result))
@@ -1041,9 +1061,12 @@ static Number CalcEval(struct Calculator* calc) {
     return NumberNAN();
   Number acc = calc->toks[0].number;
   for (u64 i = 1; i < calc->toks_num; i += 2) {
-    if (calc->toks[i].type != TOK_ADD || calc->toks[i + 1].type != TOK_NUM)
+    if (calc->toks[i].type == TOK_ADD && calc->toks[i + 1].type == TOK_NUM)
+      acc = NumberByAddingNumber(acc, calc->toks[i + 1].number);
+    else if (calc->toks[i].type == TOK_SUB && calc->toks[i + 1].type == TOK_NUM)
+      acc = NumberByAddingNumber(acc, NumberByNegatingNumber(calc->toks[i + 1].number));
+    else
       return NumberNAN();
-    acc = NumberByAddingNumber(acc, calc->toks[i + 1].number);
   }
   return acc;
 }
