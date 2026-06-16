@@ -185,6 +185,12 @@ static SEL $setFont$;
 static SEL $labelColor;
 static SEL $secondaryLabelColor;
 static SEL $setTextColor$;
+static SEL $setLineBreakMode$;
+static SEL $setAllowsDefaultTighteningForTruncation$;
+static SEL $setUsesSingleLineMode$;
+static SEL $systemOrangeColor;
+static SEL $systemGrayColor;
+static SEL $setTintColor$;
 
 // Number
 static constexpr u64 NUMBER_BASE = 10000;
@@ -450,6 +456,12 @@ static void RegisterSelectors() {
   REGISTER($labelColor);
   REGISTER($secondaryLabelColor);
   REGISTER($setTextColor$);
+  REGISTER($setLineBreakMode$);
+  REGISTER($setAllowsDefaultTighteningForTruncation$);
+  REGISTER($setUsesSingleLineMode$);
+  REGISTER($systemOrangeColor);
+  REGISTER($setTintColor$);
+  REGISTER($systemGrayColor);
 #undef REGISTER
 }
 
@@ -719,15 +731,19 @@ static void InitializeWindow() {
 
   id delete_gl = nullptr;
   AddButton(&g_ButtonDelete, &delete_gl, cv, "<", $onButtonDeleteClicked$);
+  MSG(void, delete_gl, $setTintColor$, CLASS_MSG(id, NSColor, $systemGrayColor));
 
   id clear_gl = nullptr;
   AddButton(&g_ButtonClear, &clear_gl, cv, "C", $onButtonClearClicked$);
+  MSG(void, clear_gl, $setTintColor$, CLASS_MSG(id, NSColor, $systemGrayColor));
 
   id percent_gl = nullptr;
   AddButton(&g_ButtonPercent, &percent_gl, cv, "%", $onButtonPercentClicked$);
+  MSG(void, percent_gl, $setTintColor$, CLASS_MSG(id, NSColor, $systemGrayColor));
 
   id divide_gl = nullptr;
   AddButton(&g_ButtonDivide, &divide_gl, cv, "/", $onButtonDivideClicked$);
+  MSG(void, divide_gl, $setTintColor$, CLASS_MSG(id, NSColor, $systemOrangeColor));
 
   id seven_gl = nullptr;
   AddButton(&g_ButtonSeven, &seven_gl, cv, "7", $onButtonSevenClicked$);
@@ -740,6 +756,7 @@ static void InitializeWindow() {
 
   id multiply_gl = nullptr;
   AddButton(&g_ButtonMultiply, &multiply_gl, cv, "x", $onButtonMultiplyClicked$);
+  MSG(void, multiply_gl, $setTintColor$, CLASS_MSG(id, NSColor, $systemOrangeColor));
 
   id four_gl = nullptr;
   AddButton(&g_ButtonFour, &four_gl, cv, "4", $onButtonFourClicked$);
@@ -752,6 +769,7 @@ static void InitializeWindow() {
 
   id minus_gl = nullptr;
   AddButton(&g_ButtonMinus, &minus_gl, cv, "-", $onButtonMinusClicked$);
+  MSG(void, minus_gl, $setTintColor$, CLASS_MSG(id, NSColor, $systemOrangeColor));
 
   id one_gl = nullptr;
   AddButton(&g_ButtonOne, &one_gl, cv, "1", $onButtonOneClicked$);
@@ -764,6 +782,7 @@ static void InitializeWindow() {
 
   id plus_gl = nullptr;
   AddButton(&g_ButtonPlus, &plus_gl, cv, "+", $onButtonPlusClicked$);
+  MSG(void, plus_gl, $setTintColor$, CLASS_MSG(id, NSColor, $systemOrangeColor));
 
   id plus_minus_gl = nullptr;
   AddButton(&g_ButtonPlusMinus, &plus_minus_gl, cv, "+-", $onButtonPlusMinusClicked$);
@@ -776,11 +795,15 @@ static void InitializeWindow() {
 
   id eq_gl = nullptr;
   AddButton(&g_ButtonEq, &eq_gl, cv, "=", $onButtonEqClicked$);
+  MSG(void, eq_gl, $setTintColor$, CLASS_MSG(id, NSColor, $systemOrangeColor));
 
   g_TextCurrent = CLASS_MSG(id, NSTextField, $new);
   MSG(void, g_TextCurrent, $setTranslatesAutoresizingMaskIntoConstraints$, false);
   MSG(void, g_TextCurrent, $setRefusesFirstResponder$, true);
   MSG(void, g_TextCurrent, $setAlignment$, (i64)2);
+  MSG(void, g_TextCurrent, $setUsesSingleLineMode$, true);
+  MSG(void, g_TextCurrent, $setLineBreakMode$, (u64)3);
+  MSG(void, g_TextCurrent, $setAllowsDefaultTighteningForTruncation$, true);
   MSG(void, g_TextCurrent, $setEditable$, false);
   MSG(void, g_TextCurrent, $setBordered$, false);
   MSG(void, g_TextCurrent, $setDrawsBackground$, false);
@@ -793,6 +816,8 @@ static void InitializeWindow() {
   MSG(void, g_TextPrevious, $setTranslatesAutoresizingMaskIntoConstraints$, false);
   MSG(void, g_TextPrevious, $setRefusesFirstResponder$, true);
   MSG(void, g_TextPrevious, $setAlignment$, (i64)2);
+  MSG(void, g_TextPrevious, $setLineBreakMode$, (u64)3);
+  MSG(void, g_TextPrevious, $setAllowsDefaultTighteningForTruncation$, true);
   MSG(void, g_TextPrevious, $setEditable$, false);
   MSG(void, g_TextPrevious, $setBordered$, false);
   MSG(void, g_TextPrevious, $setDrawsBackground$, false);
@@ -846,6 +871,7 @@ static void InitializeWindow() {
   MSG(void, MSG(id, MSG(id, dot_gl, $centerYAnchor), $constraintEqualToAnchor$, MSG(id, plus_minus_gl, $centerYAnchor)), $setActive$, true);
   MSG(void, MSG(id, MSG(id, MSG(id, dot_gl, $trailingAnchor), $anchorWithOffsetToAnchor$, MSG(id, eq_gl, $leadingAnchor)), $constraintEqualToConstant$, 6.), $setActive$, true);
   MSG(void, MSG(id, MSG(id, eq_gl, $centerYAnchor), $constraintEqualToAnchor$, MSG(id, plus_minus_gl, $centerYAnchor)), $setActive$, true);
+  MSG(void, MSG(id, MSG(id, cv, $widthAnchor), $constraintEqualToConstant$, 250.), $setActive$, true);
 
   MSG(void, g_Window, $makeKeyAndOrderFront$, (id)0);
 
