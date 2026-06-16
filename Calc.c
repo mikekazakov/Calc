@@ -1266,6 +1266,9 @@ static Number NumberByAddingNumber(Number left, Number right) {
   else
     left.f &= ~NUMBER_FLAG_SIGN;
 
+  if (NumberIsZero(left))
+    left.f &= ~NUMBER_FLAG_SIGN;
+
   return left;
 }
 
@@ -1315,6 +1318,14 @@ static void TestNumberByNegatingNumber() {
 }
 
 static void TestNumberByAddingNumber() {
+  // 0 + 0 = 0
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {0}, .s = 0, .f = 0}, (N){.l = {0}, .s = 0, .f = 0}), (N){.l = {0}, .s = 0, .f = 0}));
+  // 0 + -0 = 0
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {0}, .s = 0, .f = 0}, (N){.l = {0}, .s = 0, .f = NUMBER_FLAG_SIGN}), (N){.l = {0}, .s = 0, .f = 0}));
+  // -0 + 0 = 0
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {0}, .s = 0, .f = NUMBER_FLAG_SIGN}, (N){.l = {0}, .s = 0, .f = 0}), (N){.l = {0}, .s = 0, .f = 0}));
+  // -0 + -0 = 0
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {0}, .s = 0, .f = NUMBER_FLAG_SIGN}, (N){.l = {0}, .s = 0, .f = NUMBER_FLAG_SIGN}), (N){.l = {0}, .s = 0, .f = 0}));
   // 1 + 2 = 3
   A(NumberIsBitwiseEqual(NumberByAddingNumber(NumberFromU64(1), NumberFromU64(2)), NumberFromU64(3)));
   // 0 + 5 = 5
@@ -1345,10 +1356,10 @@ static void TestNumberByAddingNumber() {
   A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {0, 5000}, .s = 0, .f = 0}, (N){.l = {1}, .s = 0, .f = NUMBER_FLAG_SIGN}), (N){.l = {9999, 4999}, .s = 0, .f = 0}));
   // 9999'0000'0000'0000'0000'0000'0000 + 1'0000'0000'0000'0000'0000'0000 = NaN
   A(NumberIsNAN(NumberByAddingNumber((N){.l = {0, 0, 0, 0, 0, 0, 9999}, .s = 0, .f = 0}, (N){.l = {0, 0, 0, 0, 0, 0, 1}, .s = 0, .f = 0})));
-  // 10000 + -10000 = -0 TODO: fix this
-  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {0, 1}, .s = 0, .f = 0}, (N){.l = {0, 1}, .s = 0, .f = NUMBER_FLAG_SIGN}), (N){.l = {0}, .s = 0, .f = NUMBER_FLAG_SIGN}));
-  // 5 + -5 = -0 TODO: fix this
-  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {5}, .s = 0, .f = 0}, (N){.l = {5}, .s = 0, .f = NUMBER_FLAG_SIGN}), (N){.l = {0}, .s = 0, .f = NUMBER_FLAG_SIGN}));
+  // 10000 + -10000 = 0
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {0, 1}, .s = 0, .f = 0}, (N){.l = {0, 1}, .s = 0, .f = NUMBER_FLAG_SIGN}), (N){.l = {0}, .s = 0, .f = 0}));
+  // 5 + -5 = 0
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {5}, .s = 0, .f = 0}, (N){.l = {5}, .s = 0, .f = NUMBER_FLAG_SIGN}), (N){.l = {0}, .s = 0, .f = 0}));
 }
 
 static void Test() {
