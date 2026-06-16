@@ -192,12 +192,12 @@ static constexpr u64 NUMBER_LIMBS = 7;        // Maximum amount of 10000-based l
 static constexpr u8 NUMBER_FLAG_SIGN = 0x01;  // The number is negative.
 static constexpr u8 NUMBER_FLAG_NAN = 0x02;   // The number is a NaN, nothing else matters.
 static constexpr u8 NUMBER_FLAG_DOT = 0x04;   // The number should display a decimal point, regardless of the number value.
-struct Number {
+typedef struct Number {
   u16 limbs[NUMBER_LIMBS];  // 10000-based digits
   u8 scale;                 // 10-based scale of number, i.e. real number = stored number x 10^(-scale)
   u8 flags;
-};
-static_assert(sizeof(struct Number) == 16, "Number shall be 16 bytes long");
+} Number;
+static_assert(sizeof(Number) == 16, "Number shall be 16 bytes long");
 
 // Calculator
 static constexpr u64 MAX_TOKENS = 64;
@@ -207,7 +207,7 @@ enum TokenType {
 };
 struct Token {
   enum TokenType type;
-  struct Number number;
+  Number number;
 };
 struct Calculator {
   struct Token toks[MAX_TOKENS];
@@ -284,22 +284,23 @@ static void InitializeWindow();
 static void CalcInit(struct Calculator* calc);
 static id CalcVisualize(struct Calculator* calc);
 static bool CalcProcess(struct Calculator* calc, enum CalcCommand cmd);
-static struct Number CalcEval(struct Calculator* calc);
+static Number CalcEval(struct Calculator* calc);
 
 // Number functions
-static struct Number NumberFromU64(u64 number);
-static struct Number NumberNAN();
-static struct Number NumberByAppendingDigit(struct Number number, u8 digit);
-static struct Number NumberByRemovingRightmostSymbol(struct Number number);
-static struct Number NumberByForcingDot(struct Number number);
-static struct Number NumberByExtendingScaleTo(struct Number number, u8 scale);
-static struct Number NumberByAddingNumber(struct Number left, struct Number right);
-static id NumberToNSString(struct Number number);
-static u64 NumberOccupiedSymbols(struct Number number);
-static u64 NumberLimbsInUse(struct Number number);
-static bool NumberIsNAN(struct Number number);
-static bool NumberIsZero(struct Number number);
-static bool NumberIsBitwiseEqual(struct Number left, struct Number right);
+static Number NumberFromU64(u64 number);
+static Number NumberNAN();
+static Number NumberByAppendingDigit(Number number, u8 digit);
+static Number NumberByRemovingRightmostSymbol(Number number);
+static Number NumberByForcingDot(Number number);
+static Number NumberByExtendingScaleTo(Number number, u8 scale);
+static Number NumberByNegatingNumber(Number number);
+static Number NumberByAddingNumber(Number left, Number right);
+static id NumberToNSString(Number number);
+static u64 NumberOccupiedSymbols(Number number);
+static u64 NumberLimbsInUse(Number number);
+static bool NumberIsNAN(Number number);
+static bool NumberIsZero(Number number);
+static bool NumberIsBitwiseEqual(Number left, Number right);
 
 #pragma mark Initialization
 
@@ -509,7 +510,7 @@ static void onWindowKeyDown(id self, SEL cmd, id event) {
 
 static void feedCmdAndUpdate(enum CalcCommand cmd) {
   if (cmd == CMD_EVAL) {
-    struct Number result = CalcEval(&g_CurrentState);
+    Number result = CalcEval(&g_CurrentState);
     if (!NumberIsNAN(result)) {
       g_PreviousState = g_CurrentState;
       g_CurrentState.toks_num = 1;
@@ -894,7 +895,7 @@ static bool CalcProcess(struct Calculator* calc, enum CalcCommand cmd) {
     case CMD_8:
     case CMD_9: {
       if (calc->toks[calc->toks_num - 1].type == TOK_NUM) {
-        struct Number new = NumberByAppendingDigit(calc->toks[calc->toks_num - 1].number, (u8)cmd);
+        Number new = NumberByAppendingDigit(calc->toks[calc->toks_num - 1].number, (u8)cmd);
         if (NumberIsNAN(new))
           return false;
         calc->toks[calc->toks_num - 1].number = new;
@@ -911,7 +912,7 @@ static bool CalcProcess(struct Calculator* calc, enum CalcCommand cmd) {
     case CMD_DELETE: {
       if (calc->toks[calc->toks_num - 1].type == TOK_NUM &&  //
           (calc->toks_num == 1 || NumberOccupiedSymbols(calc->toks[calc->toks_num - 1].number) > 1)) {
-        struct Number new = NumberByRemovingRightmostSymbol(calc->toks[calc->toks_num - 1].number);
+        Number new = NumberByRemovingRightmostSymbol(calc->toks[calc->toks_num - 1].number);
         if (NumberIsNAN(new))
           return false;
         calc->toks[calc->toks_num - 1].number = new;
@@ -926,7 +927,7 @@ static bool CalcProcess(struct Calculator* calc, enum CalcCommand cmd) {
     case CMD_DOT: {
       if (calc->toks[calc->toks_num - 1].type != TOK_NUM)
         return false;  // TODO: actually "10 + ." should yeild "10 + 0."
-      struct Number new = NumberByForcingDot(calc->toks[calc->toks_num - 1].number);
+      Number new = NumberByForcingDot(calc->toks[calc->toks_num - 1].number);
       if (NumberIsNAN(new))
         return false;
       calc->toks[calc->toks_num - 1].number = new;
@@ -944,7 +945,7 @@ static bool CalcProcess(struct Calculator* calc, enum CalcCommand cmd) {
       return true;
     }
     case CMD_EVAL: {
-      struct Number result = CalcEval(calc);
+      Number result = CalcEval(calc);
       if (NumberIsNAN(result))
         return false;
       calc->toks_num = 1;
@@ -956,10 +957,10 @@ static bool CalcProcess(struct Calculator* calc, enum CalcCommand cmd) {
   return false;
 }
 
-static struct Number CalcEval(struct Calculator* calc) {
+static Number CalcEval(struct Calculator* calc) {
   if (calc->toks_num == 0 || calc->toks[calc->toks_num - 1].type != TOK_NUM)
     return NumberNAN();
-  struct Number acc = calc->toks[0].number;
+  Number acc = calc->toks[0].number;
   for (u64 i = 1; i < calc->toks_num; i += 2) {
     if (calc->toks[i].type != TOK_ADD || calc->toks[i + 1].type != TOK_NUM)
       return NumberNAN();
@@ -970,8 +971,8 @@ static struct Number CalcEval(struct Calculator* calc) {
 
 #pragma mark Number - Implementation
 
-static struct Number NumberFromU64(u64 number) {
-  struct Number r = {0};
+static Number NumberFromU64(u64 number) {
+  Number r = {0};
   u64 limb = 0;
   while (number != 0) {
     r.limbs[limb++] = number % NUMBER_BASE;
@@ -980,13 +981,21 @@ static struct Number NumberFromU64(u64 number) {
   return r;
 }
 
-static struct Number NumberNAN() {
-  struct Number nan = {0};
+static Number NumberByNegatingNumber(Number number) {
+  if (number.flags & NUMBER_FLAG_SIGN)
+    number.flags &= ~NUMBER_FLAG_SIGN;
+  else
+    number.flags |= NUMBER_FLAG_SIGN;
+  return number;
+}
+
+static Number NumberNAN() {
+  Number nan = {0};
   nan.flags = NUMBER_FLAG_NAN;
   return nan;
 }
 
-static id NumberToNSString(struct Number number) {
+static id NumberToNSString(Number number) {
   if (NumberIsNAN(number))
     return CLASS_MSG(id, NSString, $stringWithUTF8String$, "NaN");
 
@@ -1052,7 +1061,7 @@ static id NumberToNSString(struct Number number) {
   return CLASS_MSG(id, NSString, $stringWithUTF8String$, out);
 }
 
-static u64 NumberOccupiedSymbols(struct Number number) {
+static u64 NumberOccupiedSymbols(Number number) {
   if (NumberIsNAN(number))
     return 0;
 
@@ -1061,18 +1070,18 @@ static u64 NumberOccupiedSymbols(struct Number number) {
   return MSG(u64, string, $length);
 }
 
-static u64 NumberLimbsInUse(struct Number number) {
+static u64 NumberLimbsInUse(Number number) {
   for (i64 idx = NUMBER_LIMBS - 1; idx >= 0; --idx)
     if (number.limbs[idx] != 0)
       return (u64)idx + 1;
   return 0;
 }
 
-static bool NumberIsNAN(struct Number number) {
+static bool NumberIsNAN(Number number) {
   return number.flags & NUMBER_FLAG_NAN;
 }
 
-static bool NumberIsZero(struct Number number) {
+static bool NumberIsZero(Number number) {
   if (NumberIsNAN(number))
     return false;
   for (u32 i = 0; i < NUMBER_LIMBS; ++i)
@@ -1081,19 +1090,19 @@ static bool NumberIsZero(struct Number number) {
   return true;
 }
 
-static bool NumberIsBitwiseEqual(struct Number left, struct Number right) {
+static bool NumberIsBitwiseEqual(Number left, Number right) {
   u64* l = (u64*)(&left);
   u64* r = (u64*)(&right);
   return l[0] == r[0] && l[1] == r[1];
 }
 
-static struct Number NumberByAppendingDigit(struct Number number, u8 digit) {
+static Number NumberByAppendingDigit(Number number, u8 digit) {
   if (digit > 9 || NumberIsNAN(number))
     return NumberNAN();
   if (NumberIsZero(number) && number.scale == 0 && !(number.flags & NUMBER_FLAG_DOT))
     return NumberFromU64(digit);
 
-  struct Number out = number;
+  Number out = number;
   u64 limbs = NumberLimbsInUse(number);
 
   // Append a decimal digit at the right by computing mantissa = mantissa * 10 + digit.
@@ -1119,7 +1128,7 @@ static struct Number NumberByAppendingDigit(struct Number number, u8 digit) {
   return out;
 }
 
-static struct Number NumberByRemovingRightmostSymbol(struct Number number) {
+static Number NumberByRemovingRightmostSymbol(Number number) {
   if (NumberIsNAN(number))
     return number;
 
@@ -1144,7 +1153,7 @@ static struct Number NumberByRemovingRightmostSymbol(struct Number number) {
   return number;
 }
 
-static struct Number NumberByForcingDot(struct Number number) {
+static Number NumberByForcingDot(Number number) {
   if (NumberIsNAN(number))
     return number;
 
@@ -1155,7 +1164,7 @@ static struct Number NumberByForcingDot(struct Number number) {
   return number;
 }
 
-static struct Number NumberByExtendingScaleTo(struct Number number, u8 scale) {
+static Number NumberByExtendingScaleTo(Number number, u8 scale) {
   if (NumberIsNAN(number))
     return number;
 
@@ -1177,7 +1186,7 @@ static struct Number NumberByExtendingScaleTo(struct Number number, u8 scale) {
   return number;
 }
 
-static struct Number NumberByAddingNumber(struct Number left, struct Number right) {
+static Number NumberByAddingNumber(Number left, Number right) {
   if (NumberIsNAN(left) || NumberIsNAN(right))
     return NumberNAN();
 
@@ -1209,7 +1218,7 @@ static struct Number NumberByAddingNumber(struct Number left, struct Number righ
     }
     result_neg = cmp > 0 ? left_neg : right_neg;
     if (cmp < 0) {
-      struct Number temp = left;
+      Number temp = left;
       left = right;
       right = temp;
     }
@@ -1286,7 +1295,6 @@ static void assert_fail(const char* expr, int line) {
 #define assert(EXPR) ((void)((EXPR) || (assert_fail(#EXPR, __LINE__), 0)))
 
 static void TestNumberFromU64() {
-  typedef struct Number Number;
   assert(NumberIsBitwiseEqual(NumberFromU64(0), (Number){.limbs = {0}, .scale = 0, .flags = 0}));
   assert(NumberIsBitwiseEqual(NumberFromU64(1), (Number){.limbs = {1, 0, 0, 0, 0, 0, 0}, .scale = 0, .flags = 0}));
   assert(NumberIsBitwiseEqual(NumberFromU64(9999), (Number){.limbs = {9999, 0, 0, 0, 0, 0, 0}, .scale = 0, .flags = 0}));
@@ -1296,9 +1304,18 @@ static void TestNumberFromU64() {
   assert(NumberIsBitwiseEqual(NumberFromU64(18446744073709551615ULL), (Number){.limbs = {1615, 955, 737, 6744, 1844, 0, 0}, .scale = 0, .flags = 0}));
 }
 
+static void TestNumberByNegatingNumber() {
+  assert(NumberIsBitwiseEqual(NumberByNegatingNumber(NumberFromU64(1)), (Number){.limbs = {1}, .scale = 0, .flags = NUMBER_FLAG_SIGN}));
+  assert(NumberIsBitwiseEqual(NumberByNegatingNumber((Number){.limbs = {1}, .scale = 0, .flags = NUMBER_FLAG_SIGN}), NumberFromU64(1)));
+  assert(NumberIsBitwiseEqual(NumberByNegatingNumber(NumberFromU64(0)), (Number){.limbs = {0}, .scale = 0, .flags = NUMBER_FLAG_SIGN}));
+  assert(NumberIsBitwiseEqual(NumberByNegatingNumber((Number){.limbs = {5}, .scale = 1, .flags = NUMBER_FLAG_DOT}), (Number){.limbs = {5}, .scale = 1, .flags = NUMBER_FLAG_DOT | NUMBER_FLAG_SIGN}));
+  assert(NumberIsBitwiseEqual(NumberByNegatingNumber(NumberByNegatingNumber(NumberFromU64(42))), NumberFromU64(42)));
+}
+
 static void Test() {
   // Number
   TestNumberFromU64();
+  TestNumberByNegatingNumber();
 }
 
 #else
