@@ -237,6 +237,7 @@ enum CalcCommand {
   CMD_8,
   CMD_9,
   CMD_DELETE,
+  CMD_CLEAR,
   CMD_DOT,
   CMD_PLUS,
   CMD_EVAL,
@@ -483,10 +484,9 @@ static void onApplicationDidFinishLaunching(id self, SEL cmd, id notification) {
   InitializeWindow();
   MSG(void, g_App, $activateIgnoringOtherApps$, true);
 }
-
 static void onWindowKeyDown(id self, SEL cmd, id event) {
-  //      u16 keyCode = MSG(u16, event, $keyCode);
-  // TODO: switch to char-based selection
+  // u16 keyCode = MSG(u16, event, $keyCode);
+  // TODO: switch to char-based selection (?)
   switch (MSG(u16, event, $keyCode)) {
     case 0x1D:
     case 0x52:
@@ -525,7 +525,11 @@ static void onWindowKeyDown(id self, SEL cmd, id event) {
     case 0x45:
       return MSG(void, g_ButtonPlus, $performClick$, (id)0);
     case 0x4C:
+    case 0x51:
       return MSG(void, g_ButtonEq, $performClick$, (id)0);
+    case 0x35:
+    case 0x47:
+      return MSG(void, g_ButtonClear, $performClick$, (id)0);
     default:
       struct objc_super super = {.receiver = self, .super_class = NSWindow};
       ((void (*)(struct objc_super*, SEL, id))objc_msgSendSuper)(&super, $keyDown$, event);
@@ -559,7 +563,7 @@ static void onButtonDeleteClicked(id self, SEL cmd, id sender) {
 }
 
 static void onButtonClearClicked(id self, SEL cmd, id sender) {
-  printf("onButtonClearClicked\n");
+  feedCmdAndUpdate(CMD_CLEAR);
 }
 
 static void onButtonPercentClicked(id self, SEL cmd, id sender) {
@@ -988,6 +992,16 @@ static bool CalcProcess(struct Calculator* calc, enum CalcCommand cmd) {
         calc->toks_num--;
         return true;
       }
+    }
+    case CMD_CLEAR: {
+      if (calc->toks_num > 1 && calc->toks[calc->toks_num - 1].type == TOK_NUM) { // e.g. 10 + 5 Esc -> 10 +        
+        calc->toks_num--;
+      } else { // e.g. 10 + Esc -> 0
+        calc->toks_num = 1;
+        calc->toks[0].type = TOK_NUM;
+        calc->toks[0].number = NumberFromU64(0);
+      }
+      return true;
     }
     case CMD_DOT: {
       if (calc->toks[calc->toks_num - 1].type != TOK_NUM)
