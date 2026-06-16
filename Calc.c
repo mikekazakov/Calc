@@ -193,9 +193,9 @@ static constexpr u8 NUMBER_FLAG_SIGN = 0x01;  // The number is negative.
 static constexpr u8 NUMBER_FLAG_NAN = 0x02;   // The number is a NaN, nothing else matters.
 static constexpr u8 NUMBER_FLAG_DOT = 0x04;   // The number should display a decimal point, regardless of the number value.
 typedef struct Number {
-  u16 limbs[NUMBER_LIMBS];  // 10000-based digits
-  u8 scale;                 // 10-based scale of number, i.e. real number = stored number x 10^(-scale)
-  u8 flags;
+  u16 l[NUMBER_LIMBS];  // limbs consisting of 10000-based numbers
+  u8 s;                 // 10-based scale of the number, i.e. real number = stored number x 10^(-scale)
+  u8 f;                 // flags of the number, see NUMBER_FLAG_*
 } Number;
 static_assert(sizeof(Number) == 16, "Number shall be 16 bytes long");
 
@@ -975,23 +975,23 @@ static Number NumberFromU64(u64 number) {
   Number r = {0};
   u64 limb = 0;
   while (number != 0) {
-    r.limbs[limb++] = number % NUMBER_BASE;
+    r.l[limb++] = number % NUMBER_BASE;
     number = number / NUMBER_BASE;
   }
   return r;
 }
 
 static Number NumberByNegatingNumber(Number number) {
-  if (number.flags & NUMBER_FLAG_SIGN)
-    number.flags &= ~NUMBER_FLAG_SIGN;
+  if (number.f & NUMBER_FLAG_SIGN)
+    number.f &= ~NUMBER_FLAG_SIGN;
   else
-    number.flags |= NUMBER_FLAG_SIGN;
+    number.f |= NUMBER_FLAG_SIGN;
   return number;
 }
 
 static Number NumberNAN() {
   Number nan = {0};
-  nan.flags = NUMBER_FLAG_NAN;
+  nan.f = NUMBER_FLAG_NAN;
   return nan;
 }
 
@@ -1005,7 +1005,7 @@ static id NumberToNSString(Number number) {
   if (len == 0)
     len = 1;
   u32 dp = 0;
-  u16 top = number.limbs[len - 1];
+  u16 top = number.l[len - 1];
   if (top >= 1000) {
     digits[dp++] = (char)('0' + (top / 1000));
     digits[dp++] = (char)('0' + (top / 100) % 10);
@@ -1023,7 +1023,7 @@ static id NumberToNSString(Number number) {
   }
 
   for (i32 i = (i32)len - 2; i >= 0; --i) {
-    u16 limb = number.limbs[i];
+    u16 limb = number.l[i];
     digits[dp++] = (char)('0' + (limb / 1000));
     digits[dp++] = (char)('0' + (limb / 100) % 10);
     digits[dp++] = (char)('0' + ((limb / 10) % 10));
@@ -1033,23 +1033,23 @@ static id NumberToNSString(Number number) {
   // Now format the string
   char out[128] = {0};
   u32 op = 0;
-  if (number.flags & NUMBER_FLAG_SIGN)
+  if (number.f & NUMBER_FLAG_SIGN)
     out[op++] = '-';
 
-  if (number.scale == 0) {
+  if (number.s == 0) {
     for (u32 i = 0; i < dp; ++i)
       out[op++] = digits[i];
-    if (number.flags & NUMBER_FLAG_DOT)
+    if (number.f & NUMBER_FLAG_DOT)
       out[op++] = '.';
-  } else if (number.scale >= dp) {
+  } else if (number.s >= dp) {
     out[op++] = '0';
     out[op++] = '.';
-    for (u32 i = 0; i < (u32)number.scale - dp; ++i)
+    for (u32 i = 0; i < (u32)number.s - dp; ++i)
       out[op++] = '0';
     for (u32 i = 0; i < dp; ++i)
       out[op++] = digits[i];
   } else {
-    u32 int_len = dp - number.scale;
+    u32 int_len = dp - number.s;
     for (u32 i = 0; i < int_len; ++i)
       out[op++] = digits[i];
     out[op++] = '.';
@@ -1072,20 +1072,20 @@ static u64 NumberOccupiedSymbols(Number number) {
 
 static u64 NumberLimbsInUse(Number number) {
   for (i64 idx = NUMBER_LIMBS - 1; idx >= 0; --idx)
-    if (number.limbs[idx] != 0)
+    if (number.l[idx] != 0)
       return (u64)idx + 1;
   return 0;
 }
 
 static bool NumberIsNAN(Number number) {
-  return number.flags & NUMBER_FLAG_NAN;
+  return number.f & NUMBER_FLAG_NAN;
 }
 
 static bool NumberIsZero(Number number) {
   if (NumberIsNAN(number))
     return false;
   for (u32 i = 0; i < NUMBER_LIMBS; ++i)
-    if (number.limbs[i] != 0)
+    if (number.l[i] != 0)
       return false;
   return true;
 }
@@ -1099,7 +1099,7 @@ static bool NumberIsBitwiseEqual(Number left, Number right) {
 static Number NumberByAppendingDigit(Number number, u8 digit) {
   if (digit > 9 || NumberIsNAN(number))
     return NumberNAN();
-  if (NumberIsZero(number) && number.scale == 0 && !(number.flags & NUMBER_FLAG_DOT))
+  if (NumberIsZero(number) && number.s == 0 && !(number.f & NUMBER_FLAG_DOT))
     return NumberFromU64(digit);
 
   Number out = number;
@@ -1108,21 +1108,21 @@ static Number NumberByAppendingDigit(Number number, u8 digit) {
   // Append a decimal digit at the right by computing mantissa = mantissa * 10 + digit.
   u32 carry = digit;
   for (u32 i = 0; i < limbs; ++i) {
-    u32 v = (u32)out.limbs[i] * 10 + carry;
-    out.limbs[i] = (u16)(v % NUMBER_BASE);
+    u32 v = (u32)out.l[i] * 10 + carry;
+    out.l[i] = (u16)(v % NUMBER_BASE);
     carry = v / NUMBER_BASE;
   }
 
   if (carry != 0) {
     if (limbs == NUMBER_LIMBS)
       return NumberNAN();
-    out.limbs[limbs] = (u16)(carry % NUMBER_BASE);
+    out.l[limbs] = (u16)(carry % NUMBER_BASE);
   }
 
-  if (out.scale != 0 || (out.flags & NUMBER_FLAG_DOT)) {
-    if (out.scale >= 254)
+  if (out.s != 0 || (out.f & NUMBER_FLAG_DOT)) {
+    if (out.s >= 254)
       return NumberNAN();
-    out.scale += 1;
+    out.s += 1;
   }
 
   return out;
@@ -1132,8 +1132,8 @@ static Number NumberByRemovingRightmostSymbol(Number number) {
   if (NumberIsNAN(number))
     return number;
 
-  if (number.scale == 0 && (number.flags & NUMBER_FLAG_DOT)) {
-    number.flags &= ~NUMBER_FLAG_DOT;
+  if (number.s == 0 && (number.f & NUMBER_FLAG_DOT)) {
+    number.f &= ~NUMBER_FLAG_DOT;
     return number;
   }
 
@@ -1141,13 +1141,13 @@ static Number NumberByRemovingRightmostSymbol(Number number) {
 
   u32 borrow = 0;
   for (i64 i = (i64)len - 1; i >= 0; --i) {
-    u32 v = (u32)number.limbs[i] + borrow * NUMBER_BASE;
-    number.limbs[i] = (u16)(v / 10);
+    u32 v = (u32)number.l[i] + borrow * NUMBER_BASE;
+    number.l[i] = (u16)(v / 10);
     borrow = v % 10;
   }
 
-  if (number.scale > 0) {
-    number.scale -= 1;
+  if (number.s > 0) {
+    number.s -= 1;
   }
 
   return number;
@@ -1157,10 +1157,10 @@ static Number NumberByForcingDot(Number number) {
   if (NumberIsNAN(number))
     return number;
 
-  if (number.scale != 0 || (number.flags & NUMBER_FLAG_DOT))
+  if (number.s != 0 || (number.f & NUMBER_FLAG_DOT))
     return NumberNAN();
 
-  number.flags |= NUMBER_FLAG_DOT;
+  number.f |= NUMBER_FLAG_DOT;
   return number;
 }
 
@@ -1168,20 +1168,20 @@ static Number NumberByExtendingScaleTo(Number number, u8 scale) {
   if (NumberIsNAN(number))
     return number;
 
-  while (number.scale < scale) {
+  while (number.s < scale) {
     u32 carry = 0;
     u64 len = NumberLimbsInUse(number);
     for (u64 i = 0; i < len; ++i) {
-      u32 v = (u32)number.limbs[i] * 10 + carry;
-      number.limbs[i] = (u16)(v % NUMBER_BASE);
+      u32 v = (u32)number.l[i] * 10 + carry;
+      number.l[i] = (u16)(v % NUMBER_BASE);
       carry = v / NUMBER_BASE;
     }
     if (carry != 0) {
       if (len == NUMBER_LIMBS)
         return NumberNAN();
-      number.limbs[len] = (u16)carry;
+      number.l[len] = (u16)carry;
     }
-    number.scale += 1;
+    number.s += 1;
   }
   return number;
 }
@@ -1190,14 +1190,14 @@ static Number NumberByAddingNumber(Number left, Number right) {
   if (NumberIsNAN(left) || NumberIsNAN(right))
     return NumberNAN();
 
-  u8 max_scale = left.scale > right.scale ? left.scale : right.scale;
-  left = NumberByExtendingScaleTo(left, left.scale > right.scale ? left.scale : right.scale);
-  right = NumberByExtendingScaleTo(right, left.scale > right.scale ? left.scale : right.scale);
+  u8 max_scale = left.s > right.s ? left.s : right.s;
+  left = NumberByExtendingScaleTo(left, left.s > right.s ? left.s : right.s);
+  right = NumberByExtendingScaleTo(right, left.s > right.s ? left.s : right.s);
   if (NumberIsNAN(left) || NumberIsNAN(right))
     return NumberNAN();
 
-  bool left_neg = left.flags & NUMBER_FLAG_SIGN;
-  bool right_neg = right.flags & NUMBER_FLAG_SIGN;
+  bool left_neg = left.f & NUMBER_FLAG_SIGN;
+  bool right_neg = right.f & NUMBER_FLAG_SIGN;
   bool result_neg = false;
   bool perform_add = left_neg == right_neg;
   if (perform_add) {
@@ -1210,8 +1210,8 @@ static Number NumberByAddingNumber(Number left, Number right) {
       cmp = left_limbs > right_limbs ? 1 : -1;
     } else {
       for (i64 i = (i64)left_limbs - 1; i >= 0; --i) {
-        if (left.limbs[i] != right.limbs[i]) {
-          cmp = left.limbs[i] > right.limbs[i] ? 1 : -1;
+        if (left.l[i] != right.l[i]) {
+          cmp = left.l[i] > right.l[i] ? 1 : -1;
           break;
         }
       }
@@ -1230,22 +1230,22 @@ static Number NumberByAddingNumber(Number left, Number right) {
   if (perform_add) {  // left += right
     u32 carry = 0;
     for (u32 i = 0; i < max_len; ++i) {
-      u32 l = left.limbs[i];
-      u32 r = right.limbs[i];
+      u32 l = left.l[i];
+      u32 r = right.l[i];
       u32 sum = l + r + carry;
-      left.limbs[i] = (u16)(sum % NUMBER_BASE);
+      left.l[i] = (u16)(sum % NUMBER_BASE);
       carry = sum / NUMBER_BASE;
     }
     if (carry != 0) {
       if (max_len == NUMBER_LIMBS)
         return NumberNAN();
-      left.limbs[max_len] = (u16)carry;
+      left.l[max_len] = (u16)carry;
     }
   } else {  // left -= right
     i32 borrow = 0;
     for (u32 i = 0; i < max_len; ++i) {
-      i32 l = left.limbs[i];
-      i32 r = right.limbs[i];
+      i32 l = left.l[i];
+      i32 r = right.l[i];
       i32 diff = l - r - borrow;
       if (diff < 0) {
         diff += NUMBER_BASE;
@@ -1253,18 +1253,18 @@ static Number NumberByAddingNumber(Number left, Number right) {
       } else {
         borrow = 0;
       }
-      left.limbs[i] = (u16)diff;
+      left.l[i] = (u16)diff;
     }
-    while (max_len > 1 && left.limbs[max_len - 1] == 0)
+    while (max_len > 1 && left.l[max_len - 1] == 0)
       max_len--;
   }
 
-  left.scale = max_scale;
+  left.s = max_scale;
 
   if (result_neg)
-    left.flags |= NUMBER_FLAG_SIGN;
+    left.f |= NUMBER_FLAG_SIGN;
   else
-    left.flags &= ~NUMBER_FLAG_SIGN;
+    left.f &= ~NUMBER_FLAG_SIGN;
 
   return left;
 }
@@ -1292,30 +1292,70 @@ static void assert_fail(const char* expr, int line) {
   printf("Assertion failed: %s, line %d\n", expr, line);
   __builtin_trap();
 }
-#define assert(EXPR) ((void)((EXPR) || (assert_fail(#EXPR, __LINE__), 0)))
+#define A(EXPR) ((void)((EXPR) || (assert_fail(#EXPR, __LINE__), 0)))
+
+typedef Number N;
 
 static void TestNumberFromU64() {
-  assert(NumberIsBitwiseEqual(NumberFromU64(0), (Number){.limbs = {0}, .scale = 0, .flags = 0}));
-  assert(NumberIsBitwiseEqual(NumberFromU64(1), (Number){.limbs = {1, 0, 0, 0, 0, 0, 0}, .scale = 0, .flags = 0}));
-  assert(NumberIsBitwiseEqual(NumberFromU64(9999), (Number){.limbs = {9999, 0, 0, 0, 0, 0, 0}, .scale = 0, .flags = 0}));
-  assert(NumberIsBitwiseEqual(NumberFromU64(10000), (Number){.limbs = {0, 1, 0, 0, 0, 0, 0}, .scale = 0, .flags = 0}));
-  assert(NumberIsBitwiseEqual(NumberFromU64(10001), (Number){.limbs = {1, 1, 0, 0, 0, 0, 0}, .scale = 0, .flags = 0}));
-  assert(NumberIsBitwiseEqual(NumberFromU64(10000000000000000000ULL), (Number){.limbs = {0, 0, 0, 0, 1000, 0, 0}, .scale = 0, .flags = 0}));
-  assert(NumberIsBitwiseEqual(NumberFromU64(18446744073709551615ULL), (Number){.limbs = {1615, 955, 737, 6744, 1844, 0, 0}, .scale = 0, .flags = 0}));
+  A(NumberIsBitwiseEqual(NumberFromU64(0), (N){.l = {0}, .s = 0, .f = 0}));
+  A(NumberIsBitwiseEqual(NumberFromU64(1), (N){.l = {1, 0, 0, 0, 0, 0, 0}, .s = 0, .f = 0}));
+  A(NumberIsBitwiseEqual(NumberFromU64(9999), (N){.l = {9999, 0, 0, 0, 0, 0, 0}, .s = 0, .f = 0}));
+  A(NumberIsBitwiseEqual(NumberFromU64(10000), (N){.l = {0, 1, 0, 0, 0, 0, 0}, .s = 0, .f = 0}));
+  A(NumberIsBitwiseEqual(NumberFromU64(10001), (N){.l = {1, 1, 0, 0, 0, 0, 0}, .s = 0, .f = 0}));
+  A(NumberIsBitwiseEqual(NumberFromU64(10000000000000000000ULL), (N){.l = {0, 0, 0, 0, 1000, 0, 0}, .s = 0, .f = 0}));
+  A(NumberIsBitwiseEqual(NumberFromU64(18446744073709551615ULL), (N){.l = {1615, 955, 737, 6744, 1844, 0, 0}, .s = 0, .f = 0}));
 }
 
 static void TestNumberByNegatingNumber() {
-  assert(NumberIsBitwiseEqual(NumberByNegatingNumber(NumberFromU64(1)), (Number){.limbs = {1}, .scale = 0, .flags = NUMBER_FLAG_SIGN}));
-  assert(NumberIsBitwiseEqual(NumberByNegatingNumber((Number){.limbs = {1}, .scale = 0, .flags = NUMBER_FLAG_SIGN}), NumberFromU64(1)));
-  assert(NumberIsBitwiseEqual(NumberByNegatingNumber(NumberFromU64(0)), (Number){.limbs = {0}, .scale = 0, .flags = NUMBER_FLAG_SIGN}));
-  assert(NumberIsBitwiseEqual(NumberByNegatingNumber((Number){.limbs = {5}, .scale = 1, .flags = NUMBER_FLAG_DOT}), (Number){.limbs = {5}, .scale = 1, .flags = NUMBER_FLAG_DOT | NUMBER_FLAG_SIGN}));
-  assert(NumberIsBitwiseEqual(NumberByNegatingNumber(NumberByNegatingNumber(NumberFromU64(42))), NumberFromU64(42)));
+  A(NumberIsBitwiseEqual(NumberByNegatingNumber(NumberFromU64(1)), (N){.l = {1}, .s = 0, .f = NUMBER_FLAG_SIGN}));
+  A(NumberIsBitwiseEqual(NumberByNegatingNumber((N){.l = {1}, .s = 0, .f = NUMBER_FLAG_SIGN}), NumberFromU64(1)));
+  A(NumberIsBitwiseEqual(NumberByNegatingNumber(NumberFromU64(0)), (N){.l = {0}, .s = 0, .f = NUMBER_FLAG_SIGN}));
+  A(NumberIsBitwiseEqual(NumberByNegatingNumber((N){.l = {5}, .s = 1, .f = NUMBER_FLAG_DOT}), (N){.l = {5}, .s = 1, .f = NUMBER_FLAG_DOT | NUMBER_FLAG_SIGN}));
+  A(NumberIsBitwiseEqual(NumberByNegatingNumber(NumberByNegatingNumber(NumberFromU64(42))), NumberFromU64(42)));
+}
+
+static void TestNumberByAddingNumber() {
+  // 1 + 2 = 3
+  A(NumberIsBitwiseEqual(NumberByAddingNumber(NumberFromU64(1), NumberFromU64(2)), NumberFromU64(3)));
+  // 0 + 5 = 5
+  A(NumberIsBitwiseEqual(NumberByAddingNumber(NumberFromU64(0), NumberFromU64(5)), NumberFromU64(5)));
+  // 5 + 0 = 5
+  A(NumberIsBitwiseEqual(NumberByAddingNumber(NumberFromU64(5), NumberFromU64(0)), NumberFromU64(5)));
+  // 9999 + 1 = 10000
+  A(NumberIsBitwiseEqual(NumberByAddingNumber(NumberFromU64(9999), NumberFromU64(1)), (N){.l = {0, 1}, .s = 0, .f = 0}));
+  // -1 + -2 = -3
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {1}, .s = 0, .f = NUMBER_FLAG_SIGN}, (N){.l = {2}, .s = 0, .f = NUMBER_FLAG_SIGN}), (N){.l = {3}, .s = 0, .f = NUMBER_FLAG_SIGN}));
+  // -5 + 3 = -2
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {5}, .s = 0, .f = NUMBER_FLAG_SIGN}, (N){.l = {3}, .s = 0, .f = 0}), (N){.l = {2}, .s = 0, .f = NUMBER_FLAG_SIGN}));
+  // 3 + -5 = -2
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {3}, .s = 0, .f = 0}, (N){.l = {5}, .s = 0, .f = NUMBER_FLAG_SIGN}), (N){.l = {2}, .s = 0, .f = NUMBER_FLAG_SIGN}));
+  // -5 + -5 = -10
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {5}, .s = 0, .f = NUMBER_FLAG_SIGN}, (N){.l = {5}, .s = 0, .f = NUMBER_FLAG_SIGN}), (N){.l = {10}, .s = 0, .f = NUMBER_FLAG_SIGN}));
+  // 5.00 + 3.00 = 8.00
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {500}, .s = 2, .f = 0}, (N){.l = {300}, .s = 2, .f = 0}), (N){.l = {800}, .s = 2, .f = 0}));
+  // 10.0 + 2.00 = 12.00
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {100}, .s = 1, .f = 0}, (N){.l = {200}, .s = 2, .f = 0}), (N){.l = {1200}, .s = 2, .f = 0}));
+  // NaN + 5 = NaN
+  A(NumberIsNAN(NumberByAddingNumber(NumberNAN(), NumberFromU64(5))));
+  // 5 + NaN = NaN
+  A(NumberIsNAN(NumberByAddingNumber(NumberFromU64(5), NumberNAN())));
+  // 1 * 10^250 + 1 * 10^10 = NaN
+  A(NumberIsNAN(NumberByAddingNumber((N){.l = {1}, .s = 250, .f = 0}, (N){.l = {1}, .s = 10, .f = 0})));
+  // 5000'0000 + -1 = 4999'9999
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {0, 5000}, .s = 0, .f = 0}, (N){.l = {1}, .s = 0, .f = NUMBER_FLAG_SIGN}), (N){.l = {9999, 4999}, .s = 0, .f = 0}));
+  // 9999'0000'0000'0000'0000'0000'0000 + 1'0000'0000'0000'0000'0000'0000 = NaN
+  A(NumberIsNAN(NumberByAddingNumber((N){.l = {0, 0, 0, 0, 0, 0, 9999}, .s = 0, .f = 0}, (N){.l = {0, 0, 0, 0, 0, 0, 1}, .s = 0, .f = 0})));
+  // 10000 + -10000 = -0 TODO: fix this
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {0, 1}, .s = 0, .f = 0}, (N){.l = {0, 1}, .s = 0, .f = NUMBER_FLAG_SIGN}), (N){.l = {0}, .s = 0, .f = NUMBER_FLAG_SIGN}));
+  // 5 + -5 = -0 TODO: fix this
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {5}, .s = 0, .f = 0}, (N){.l = {5}, .s = 0, .f = NUMBER_FLAG_SIGN}), (N){.l = {0}, .s = 0, .f = NUMBER_FLAG_SIGN}));
 }
 
 static void Test() {
   // Number
   TestNumberFromU64();
   TestNumberByNegatingNumber();
+  TestNumberByAddingNumber();
 }
 
 #else
