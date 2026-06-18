@@ -310,6 +310,7 @@ static Number NumberByForcingDot(Number number);
 static Number NumberByExtendingScaleTo(Number number, u8 scale);
 static Number NumberByNegatingNumber(Number number);
 static Number NumberByAddingNumber(Number left, Number right);
+static Number NumberByRemovingRedundantScale(Number number);
 static id NumberToNSString(Number number);
 static u64 NumberOccupiedSymbols(Number number);
 static u64 NumberLimbsInUse(Number number);
@@ -1288,6 +1289,33 @@ static Number NumberByExtendingScaleTo(Number number, u8 scale) {
   return number;
 }
 
+static Number NumberByRemovingRedundantScale(Number number) {
+  if (NumberIsNAN(number) || number.s == 0) {
+    return number;
+  }
+
+  while (number.s > 0) {
+    u64 limbs_in_use = NumberLimbsInUse(number);
+    if (limbs_in_use == 0) {
+      number.s = 0;
+      break;
+    }
+    if (number.l[0] % 10 != 0) {
+      break;
+    }
+    u32 borrow = 0;
+    for (i64 i = (i64)limbs_in_use - 1; i >= 0; --i) {
+      u32 v = (u32)number.l[i] + borrow * NUMBER_BASE;
+      number.l[i] = (u16)(v / 10);
+      borrow = v % 10;
+    }
+    number.s--;
+  }
+  if (number.s == 0)
+    number.f &= ~NUMBER_FLAG_DOT;
+  return number;
+}
+
 static Number NumberByAddingNumber(Number left, Number right) {
   if (NumberIsNAN(left) || NumberIsNAN(right))
     return NumberNAN();
@@ -1371,6 +1399,8 @@ static Number NumberByAddingNumber(Number left, Number right) {
   if (NumberIsZero(left))
     left.f &= ~NUMBER_FLAG_SIGN;
 
+  left = NumberByRemovingRedundantScale(left);
+
   return left;
 }
 
@@ -1419,6 +1449,21 @@ static void TestNumberByNegatingNumber() {
   A(NumberIsBitwiseEqual(NumberByNegatingNumber(NumberByNegatingNumber(NumberFromU64(42))), NumberFromU64(42)));
 }
 
+static void TestNumberByRemovingRedundantScale() {
+  A(NumberIsBitwiseEqual(NumberByRemovingRedundantScale((N){.l = {10}, .s = 1}), (N){.l = {1}, .s = 0}));
+  A(NumberIsBitwiseEqual(NumberByRemovingRedundantScale((N){.l = {120}, .s = 2}), (N){.l = {12}, .s = 1}));
+  A(NumberIsBitwiseEqual(NumberByRemovingRedundantScale((N){.l = {123}, .s = 2}), (N){.l = {123}, .s = 2}));
+  A(NumberIsBitwiseEqual(NumberByRemovingRedundantScale((N){.l = {12300}, .s = 0}), (N){.l = {12300}, .s = 0}));
+  A(NumberIsBitwiseEqual(NumberByRemovingRedundantScale((N){.l = {10}, .s = 2}), (N){.l = {1}, .s = 1}));
+  A(NumberIsBitwiseEqual(NumberByRemovingRedundantScale((N){.l = {100}, .s = 2}), (N){.l = {1}, .s = 0}));
+  A(NumberIsBitwiseEqual(NumberByRemovingRedundantScale((N){.l = {0}, .s = 5}), (N){.l = {0}, .s = 0}));
+  A(NumberIsBitwiseEqual(NumberByRemovingRedundantScale((N){.l = {10}, .s = 1, .f = NUMBER_FLAG_DOT}), (N){.l = {1}, .s = 0, .f = 0}));
+  A(NumberIsBitwiseEqual(NumberByRemovingRedundantScale((N){.l = {10000}, .s = 4}), (N){.l = {1}, .s = 0}));
+  A(NumberIsBitwiseEqual(NumberByRemovingRedundantScale((N){.l = {10001}, .s = 4}), (N){.l = {10001}, .s = 4}));
+  A(NumberIsBitwiseEqual(NumberByRemovingRedundantScale((N){.l = {10, 1}, .s = 5}), (N){.l = {1001}, .s = 4}));
+  A(NumberIsNAN(NumberByRemovingRedundantScale(NumberNAN())));
+}
+
 static void TestNumberByAddingNumber() {
   // 0 + 0 = 0
   A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {0}, .s = 0, .f = 0}, (N){.l = {0}, .s = 0, .f = 0}), (N){.l = {0}, .s = 0, .f = 0}));
@@ -1444,10 +1489,16 @@ static void TestNumberByAddingNumber() {
   A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {3}, .s = 0, .f = 0}, (N){.l = {5}, .s = 0, .f = NUMBER_FLAG_SIGN}), (N){.l = {2}, .s = 0, .f = NUMBER_FLAG_SIGN}));
   // -5 + -5 = -10
   A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {5}, .s = 0, .f = NUMBER_FLAG_SIGN}, (N){.l = {5}, .s = 0, .f = NUMBER_FLAG_SIGN}), (N){.l = {10}, .s = 0, .f = NUMBER_FLAG_SIGN}));
-  // 5.00 + 3.00 = 8.00
-  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {500}, .s = 2, .f = 0}, (N){.l = {300}, .s = 2, .f = 0}), (N){.l = {800}, .s = 2, .f = 0}));
-  // 10.0 + 2.00 = 12.00
-  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {100}, .s = 1, .f = 0}, (N){.l = {200}, .s = 2, .f = 0}), (N){.l = {1200}, .s = 2, .f = 0}));
+  // 0.5 + 0.5 = 1
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {5}, .s = 1, .f = 0}, (N){.l = {5}, .s = 1, .f = 0}), (N){.l = {1}, .s = 0, .f = 0}));
+  // 0.05 + 0.05 = 0.1
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {5}, .s = 2, .f = 0}, (N){.l = {5}, .s = 2, .f = 0}), (N){.l = {1}, .s = 1, .f = 0}));
+  // 0.1 + 0.2 = 0.3
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {1}, .s = 1, .f = 0}, (N){.l = {2}, .s = 1, .f = 0}), (N){.l = {3}, .s = 1, .f = 0}));
+  // 5.00 + 3.00 = 8
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {500}, .s = 2, .f = 0}, (N){.l = {300}, .s = 2, .f = 0}), (N){.l = {8}, .s = 0, .f = 0}));
+  // 10.0 + 2.00 = 12
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {100}, .s = 1, .f = 0}, (N){.l = {200}, .s = 2, .f = 0}), (N){.l = {12}, .s = 0, .f = 0}));
   // NaN + 5 = NaN
   A(NumberIsNAN(NumberByAddingNumber(NumberNAN(), NumberFromU64(5))));
   // 5 + NaN = NaN
@@ -1470,6 +1521,7 @@ static void Test() {
   // Number
   TestNumberFromU64();
   TestNumberByNegatingNumber();
+  TestNumberByRemovingRedundantScale();
   TestNumberByAddingNumber();
 }
 
