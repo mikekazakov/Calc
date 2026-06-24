@@ -46,19 +46,19 @@ static void* ObjCRuntime;
 static void* FoundationFramework;
 static void* AppKitFramework;
 
-#define MSG_IMPL_0(r, obj, sel) ((r(*)(id, SEL))objc_msgSend)(obj, sel)
-#define MSG_IMPL_1(r, obj, sel, a) ((r(*)(id, SEL, typeof(a)))objc_msgSend)(obj, sel, (a))
-#define MSG_IMPL_2(r, obj, sel, a, b) ((r(*)(id, SEL, typeof(a), typeof(b)))objc_msgSend)(obj, sel, (a), (b))
-#define MSG_IMPL_3(r, obj, sel, a, b, c) ((r(*)(id, SEL, typeof(a), typeof(b), typeof(c)))objc_msgSend)(obj, sel, (a), (b), (c))
-#define MSG_IMPL_4(r, obj, sel, a, b, c, d) ((r(*)(id, SEL, typeof(a), typeof(b), typeof(c), typeof(d)))objc_msgSend)(obj, sel, (a), (b), (c), (d))
+#define MSG_IMPL_0(r, obj, sel) ((r (*)(id, SEL))objc_msgSend)(obj, sel)
+#define MSG_IMPL_1(r, obj, sel, a) ((r (*)(id, SEL, typeof(a)))objc_msgSend)(obj, sel, (a))
+#define MSG_IMPL_2(r, obj, sel, a, b) ((r (*)(id, SEL, typeof(a), typeof(b)))objc_msgSend)(obj, sel, (a), (b))
+#define MSG_IMPL_3(r, obj, sel, a, b, c) ((r (*)(id, SEL, typeof(a), typeof(b), typeof(c)))objc_msgSend)(obj, sel, (a), (b), (c))
+#define MSG_IMPL_4(r, obj, sel, a, b, c, d) ((r (*)(id, SEL, typeof(a), typeof(b), typeof(c), typeof(d)))objc_msgSend)(obj, sel, (a), (b), (c), (d))
 #define MSG_IMPL_N(_4, _3, _2, _1, NAME, ...) NAME
 #define MSG(ret, obj, sel, ...) MSG_IMPL_N(__VA_ARGS__ __VA_OPT__(, ) MSG_IMPL_4, MSG_IMPL_3, MSG_IMPL_2, MSG_IMPL_1, MSG_IMPL_0)(ret, obj, sel __VA_OPT__(, ) __VA_ARGS__)
 
-#define CLASS_MSG_IMPL_0(r, cls, sel) ((r(*)(Class, SEL))objc_msgSend)(cls, sel)
-#define CLASS_MSG_IMPL_1(r, cls, sel, a) ((r(*)(Class, SEL, typeof(a)))objc_msgSend)(cls, sel, (a))
-#define CLASS_MSG_IMPL_2(r, cls, sel, a, b) ((r(*)(Class, SEL, typeof(a), typeof(b)))objc_msgSend)(cls, sel, (a), (b))
-#define CLASS_MSG_IMPL_3(r, cls, sel, a, b, c) ((r(*)(Class, SEL, typeof(a), typeof(b), typeof(c)))objc_msgSend)(cls, sel, (a), (b), (c))
-#define CLASS_MSG_IMPL_4(r, cls, sel, a, b, c, d) ((r(*)(Class, SEL, typeof(a), typeof(b), typeof(c), typeof(d)))objc_msgSend)(cls, sel, (a), (b), (c), (d))
+#define CLASS_MSG_IMPL_0(r, cls, sel) ((r (*)(Class, SEL))objc_msgSend)(cls, sel)
+#define CLASS_MSG_IMPL_1(r, cls, sel, a) ((r (*)(Class, SEL, typeof(a)))objc_msgSend)(cls, sel, (a))
+#define CLASS_MSG_IMPL_2(r, cls, sel, a, b) ((r (*)(Class, SEL, typeof(a), typeof(b)))objc_msgSend)(cls, sel, (a), (b))
+#define CLASS_MSG_IMPL_3(r, cls, sel, a, b, c) ((r (*)(Class, SEL, typeof(a), typeof(b), typeof(c)))objc_msgSend)(cls, sel, (a), (b), (c))
+#define CLASS_MSG_IMPL_4(r, cls, sel, a, b, c, d) ((r (*)(Class, SEL, typeof(a), typeof(b), typeof(c), typeof(d)))objc_msgSend)(cls, sel, (a), (b), (c), (d))
 #define CLASS_MSG_IMPL_N(_4, _3, _2, _1, NAME, ...) NAME
 #define CLASS_MSG(ret, class, sel, ...) \
   CLASS_MSG_IMPL_N(__VA_ARGS__ __VA_OPT__(, ) CLASS_MSG_IMPL_4, CLASS_MSG_IMPL_3, CLASS_MSG_IMPL_2, CLASS_MSG_IMPL_1, CLASS_MSG_IMPL_0)(ret, class, sel __VA_OPT__(, ) __VA_ARGS__)
@@ -200,10 +200,11 @@ static SEL $widthAnchor;
 
 // Number
 static constexpr u64 NUMBER_BASE = 10000;
-static constexpr u64 NUMBER_LIMBS = 7;        // Maximum amount of 10000-based limbs in a number.
-static constexpr u8 NUMBER_FLAG_SIGN = 0x01;  // The number is negative.
-static constexpr u8 NUMBER_FLAG_NAN = 0x02;   // The number is a NaN, nothing else matters.
-static constexpr u8 NUMBER_FLAG_DOT = 0x04;   // The number should display a decimal point, regardless of the number value.
+static constexpr u64 NUMBER_LIMBS = 7;                  // Maximum amount of 10000-based limbs in a number.
+static constexpr u64 NUMBER_DIGITS = NUMBER_LIMBS * 4;  // Maximum amount of digits in a number.
+static constexpr u8 NUMBER_FLAG_SIGN = 0x01;            // The number is negative.
+static constexpr u8 NUMBER_FLAG_NAN = 0x02;             // The number is a NaN, nothing else matters.
+static constexpr u8 NUMBER_FLAG_DOT = 0x04;             // The number should display a decimal point, regardless of the number value.
 typedef struct Number {
   u16 l[NUMBER_LIMBS];  // limbs consisting of 10000-based numbers
   u8 s;                 // 10-based scale of the number, i.e. real number = stored number x 10^(-scale)
@@ -314,6 +315,7 @@ static Number NumberByRemovingRedundantScale(Number number);
 static id NumberToNSString(Number number);
 static u64 NumberOccupiedSymbols(Number number);
 static u64 NumberLimbsInUse(Number number);
+static u64 NumberDigitsInUse(Number number);
 static bool NumberIsNAN(Number number);
 static bool NumberIsZero(Number number);
 static bool NumberIsBitwiseEqual(Number left, Number right);
@@ -1180,6 +1182,20 @@ static u64 NumberLimbsInUse(Number number) {
   return 0;
 }
 
+static u64 NumberDigitsInUse(Number number) {
+  for (i64 idx = NUMBER_LIMBS - 1; idx >= 0; --idx)
+    if (number.l[idx] != 0) {
+      if (number.l[idx] >= 1000)
+        return (u64)idx * 4 + 4;
+      if (number.l[idx] >= 100)
+        return (u64)idx * 4 + 3;
+      if (number.l[idx] >= 10)
+        return (u64)idx * 4 + 2;
+      return (u64)idx * 4 + 1;
+    }
+  return 0;
+}
+
 static bool NumberIsNAN(Number number) {
   return number.f & NUMBER_FLAG_NAN;
 }
@@ -1289,6 +1305,59 @@ static Number NumberByExtendingScaleTo(Number number, u8 scale) {
   return number;
 }
 
+static Number NumberByDroppingLeastSignificantDigitLossy(Number number) {
+  if (NumberIsNAN(number) || number.s == 0)
+    return number;
+  u32 carry = number.l[0] % 10 < 5 ? 0 : 10;
+  for (u64 i = 0; i < NUMBER_LIMBS; ++i) {
+    u32 v = (u32)number.l[i] + carry;
+    number.l[i] = (u16)(v % NUMBER_BASE);
+    carry = v / NUMBER_BASE;
+  }
+  u32 borrow = carry;
+  for (i64 i = NUMBER_LIMBS - 1; i >= 0; --i) {
+    u32 v = (u32)number.l[i] + borrow * NUMBER_BASE;
+    number.l[i] = (u16)(v / 10);
+    borrow = v % 10;
+  }
+  number.s--;
+  return number;
+}
+
+static void NumberEquilizeScalesLossy(Number* left_ptr, Number* right_ptr) {
+  if (left_ptr == nullptr ||      //
+      right_ptr == nullptr ||     //
+      NumberIsNAN(*left_ptr) ||   //
+      NumberIsNAN(*right_ptr) ||  //
+      left_ptr->s == right_ptr->s)
+    return;
+  Number left = NumberByRemovingRedundantScale(*left_ptr);
+  Number right = NumberByRemovingRedundantScale(*right_ptr);
+  while (left.s != right.s) {
+    u8 max_scale = left.s > right.s ? left.s : right.s;
+    u64 left_digits_used = NumberDigitsInUse(left);
+    u64 right_digits_used = NumberDigitsInUse(right);
+    if (left.s < max_scale && left_digits_used < NUMBER_DIGITS) {
+      left = NumberByExtendingScaleTo(left, left.s + 1);
+      continue;
+    }
+    if (right.s < max_scale && right_digits_used < NUMBER_DIGITS) {
+      right = NumberByExtendingScaleTo(right, right.s + 1);
+      continue;
+    }
+    if (left.s == max_scale) {
+      left = NumberByDroppingLeastSignificantDigitLossy(left);
+      continue;
+    }
+    if (right.s == max_scale) {
+      right = NumberByDroppingLeastSignificantDigitLossy(right);
+      continue;
+    }
+  }
+  *left_ptr = left;
+  *right_ptr = right;
+}
+
 static Number NumberByRemovingRedundantScale(Number number) {
   if (NumberIsNAN(number) || number.s == 0) {
     return number;
@@ -1320,11 +1389,7 @@ static Number NumberByAddingNumber(Number left, Number right) {
   if (NumberIsNAN(left) || NumberIsNAN(right))
     return NumberNAN();
 
-  u8 max_scale = left.s > right.s ? left.s : right.s;
-  left = NumberByExtendingScaleTo(left, left.s > right.s ? left.s : right.s);
-  right = NumberByExtendingScaleTo(right, left.s > right.s ? left.s : right.s);
-  if (NumberIsNAN(left) || NumberIsNAN(right))
-    return NumberNAN();
+  NumberEquilizeScalesLossy(&left, &right);
 
   bool left_neg = left.f & NUMBER_FLAG_SIGN;
   bool right_neg = right.f & NUMBER_FLAG_SIGN;
@@ -1388,8 +1453,6 @@ static Number NumberByAddingNumber(Number left, Number right) {
     while (max_len > 1 && left.l[max_len - 1] == 0)
       max_len--;
   }
-
-  left.s = max_scale;
 
   if (result_neg)
     left.f |= NUMBER_FLAG_SIGN;
@@ -1464,6 +1527,140 @@ static void TestNumberByRemovingRedundantScale() {
   A(NumberIsNAN(NumberByRemovingRedundantScale(NumberNAN())));
 }
 
+static void TestNumberDigitsInUse() {
+  A(NumberDigitsInUse((N){.l = {0}}) == 0);
+  A(NumberDigitsInUse((N){.l = {1}}) == 1);
+  A(NumberDigitsInUse((N){.l = {9}}) == 1);
+  A(NumberDigitsInUse((N){.l = {10}}) == 2);
+  A(NumberDigitsInUse((N){.l = {99}}) == 2);
+  A(NumberDigitsInUse((N){.l = {100}}) == 3);
+  A(NumberDigitsInUse((N){.l = {999}}) == 3);
+  A(NumberDigitsInUse((N){.l = {1000}}) == 4);
+  A(NumberDigitsInUse((N){.l = {9999}}) == 4);
+  A(NumberDigitsInUse((N){.l = {0, 1}}) == 5);
+  A(NumberDigitsInUse((N){.l = {0, 9}}) == 5);
+  A(NumberDigitsInUse((N){.l = {0, 10}}) == 6);
+  A(NumberDigitsInUse((N){.l = {0, 99}}) == 6);
+  A(NumberDigitsInUse((N){.l = {0, 100}}) == 7);
+  A(NumberDigitsInUse((N){.l = {0, 999}}) == 7);
+  A(NumberDigitsInUse((N){.l = {0, 1000}}) == 8);
+  A(NumberDigitsInUse((N){.l = {0, 9999}}) == 8);
+  A(NumberDigitsInUse((N){.l = {9999, 1}}) == 5);
+  A(NumberDigitsInUse((N){.l = {9999, 9999}}) == 8);
+  A(NumberDigitsInUse((N){.l = {0, 0, 1}}) == 9);
+  A(NumberDigitsInUse((N){.l = {0, 0, 9}}) == 9);
+  A(NumberDigitsInUse((N){.l = {0, 0, 10}}) == 10);
+  A(NumberDigitsInUse((N){.l = {0, 0, 1000}}) == 12);
+  A(NumberDigitsInUse((N){.l = {0, 0, 9999}}) == 12);
+  A(NumberDigitsInUse((N){.l = {0, 0, 0, 1}}) == 13);
+  A(NumberDigitsInUse((N){.l = {0, 0, 0, 9999}}) == 16);
+  A(NumberDigitsInUse((N){.l = {0, 0, 0, 0, 1}}) == 17);
+  A(NumberDigitsInUse((N){.l = {0, 0, 0, 0, 9999}}) == 20);
+  A(NumberDigitsInUse((N){.l = {0, 0, 0, 0, 0, 1}}) == 21);
+  A(NumberDigitsInUse((N){.l = {0, 0, 0, 0, 0, 9999}}) == 24);
+  A(NumberDigitsInUse((N){.l = {0, 0, 0, 0, 0, 0, 1}}) == 25);
+  A(NumberDigitsInUse((N){.l = {0, 0, 0, 0, 0, 0, 9}}) == 25);
+  A(NumberDigitsInUse((N){.l = {0, 0, 0, 0, 0, 0, 10}}) == 26);
+  A(NumberDigitsInUse((N){.l = {0, 0, 0, 0, 0, 0, 100}}) == 27);
+  A(NumberDigitsInUse((N){.l = {0, 0, 0, 0, 0, 0, 1000}}) == 28);
+  A(NumberDigitsInUse((N){.l = {0, 0, 0, 0, 0, 0, 9999}}) == 28);
+  A(NumberDigitsInUse((N){.l = {5}, .s = 10, .f = 0}) == 1);
+  A(NumberDigitsInUse((N){.l = {1234}, .s = 3, .f = NUMBER_FLAG_SIGN}) == 4);
+  A(NumberDigitsInUse((N){.l = {1234}, .s = 0, .f = NUMBER_FLAG_DOT}) == 4);
+}
+
+static void TestNumberByDroppingLeastSignificantDigitLossy() {
+  A(NumberIsBitwiseEqual(NumberByDroppingLeastSignificantDigitLossy((N){.l = {5}, .s = 0}), (N){.l = {5}, .s = 0}));
+  A(NumberIsBitwiseEqual(NumberByDroppingLeastSignificantDigitLossy((N){.l = {0}, .s = 0}), (N){.l = {0}, .s = 0}));
+  A(NumberIsNAN(NumberByDroppingLeastSignificantDigitLossy(NumberNAN())));
+  A(NumberIsBitwiseEqual(NumberByDroppingLeastSignificantDigitLossy((N){.l = {0}, .s = 1}), (N){.l = {0}, .s = 0}));
+  A(NumberIsBitwiseEqual(NumberByDroppingLeastSignificantDigitLossy((N){.l = {4}, .s = 1}), (N){.l = {0}, .s = 0}));
+  A(NumberIsBitwiseEqual(NumberByDroppingLeastSignificantDigitLossy((N){.l = {14}, .s = 1}), (N){.l = {1}, .s = 0}));
+  A(NumberIsBitwiseEqual(NumberByDroppingLeastSignificantDigitLossy((N){.l = {5}, .s = 1}), (N){.l = {1}, .s = 0}));
+  A(NumberIsBitwiseEqual(NumberByDroppingLeastSignificantDigitLossy((N){.l = {15}, .s = 1}), (N){.l = {2}, .s = 0}));
+  A(NumberIsBitwiseEqual(NumberByDroppingLeastSignificantDigitLossy((N){.l = {9}, .s = 1}), (N){.l = {1}, .s = 0}));
+  A(NumberIsBitwiseEqual(NumberByDroppingLeastSignificantDigitLossy((N){.l = {16}, .s = 1}), (N){.l = {2}, .s = 0}));
+  A(NumberIsBitwiseEqual(NumberByDroppingLeastSignificantDigitLossy((N){.l = {10}, .s = 1}), (N){.l = {1}, .s = 0}));
+  A(NumberIsBitwiseEqual(NumberByDroppingLeastSignificantDigitLossy((N){.l = {123}, .s = 2}), (N){.l = {12}, .s = 1}));
+  A(NumberIsBitwiseEqual(NumberByDroppingLeastSignificantDigitLossy((N){.l = {125}, .s = 2}), (N){.l = {13}, .s = 1}));
+  A(NumberIsBitwiseEqual(NumberByDroppingLeastSignificantDigitLossy((N){.l = {1234}, .s = 2}), (N){.l = {123}, .s = 1}));
+  A(NumberIsBitwiseEqual(NumberByDroppingLeastSignificantDigitLossy((N){.l = {9999}, .s = 1}), (N){.l = {1000}, .s = 0}));
+  A(NumberIsBitwiseEqual(NumberByDroppingLeastSignificantDigitLossy((N){.l = {0, 1}, .s = 1}), (N){.l = {1000}, .s = 0}));
+  A(NumberIsBitwiseEqual(NumberByDroppingLeastSignificantDigitLossy((N){.l = {1230, 1}, .s = 1}), (N){.l = {1123}, .s = 0}));
+  A(NumberIsBitwiseEqual(NumberByDroppingLeastSignificantDigitLossy((N){.l = {15}, .s = 1, .f = NUMBER_FLAG_SIGN}), (N){.l = {2}, .s = 0, .f = NUMBER_FLAG_SIGN}));
+  A(NumberIsBitwiseEqual(NumberByDroppingLeastSignificantDigitLossy((N){.l = {14}, .s = 1, .f = NUMBER_FLAG_SIGN}), (N){.l = {1}, .s = 0, .f = NUMBER_FLAG_SIGN}));
+  A(NumberIsBitwiseEqual(NumberByDroppingLeastSignificantDigitLossy((N){.l = {15}, .s = 1, .f = NUMBER_FLAG_DOT}), (N){.l = {2}, .s = 0, .f = NUMBER_FLAG_DOT}));
+  A(NumberIsBitwiseEqual(NumberByDroppingLeastSignificantDigitLossy((N){.l = {9999, 9999, 9999, 9999, 9999, 9999, 9999}, .s = 1}), (N){.l = {0, 0, 0, 0, 0, 0, 1000}, .s = 0}));
+}
+
+static void TestNumberEquilizeScalesLossy() {
+  {
+    N l = {.l = {1}, .s = 0}, r = {.l = {2}, .s = 0};
+    NumberEquilizeScalesLossy(&l, &r);
+    A(NumberIsBitwiseEqual(l, (N){.l = {1}, .s = 0}) && NumberIsBitwiseEqual(r, (N){.l = {2}, .s = 0}));
+  }
+  {
+    N l = NumberNAN(), r = {.l = {1}, .s = 1};
+    NumberEquilizeScalesLossy(&l, &r);
+    A(NumberIsNAN(l) && NumberIsBitwiseEqual(r, (N){.l = {1}, .s = 1}));
+  }
+  {
+    N l = {.l = {1}, .s = 1}, r = NumberNAN();
+    NumberEquilizeScalesLossy(&l, &r);
+    A(NumberIsBitwiseEqual(l, (N){.l = {1}, .s = 1}) && NumberIsNAN(r));
+  }
+  {
+    N l = {.l = {1}, .s = 0}, r = {.l = {15}, .s = 1};
+    NumberEquilizeScalesLossy(&l, &r);
+    A(NumberIsBitwiseEqual(l, (N){.l = {10}, .s = 1}) && NumberIsBitwiseEqual(r, (N){.l = {15}, .s = 1}));
+  }
+  {
+    N l = {.l = {15}, .s = 1}, r = {.l = {1}, .s = 0};
+    NumberEquilizeScalesLossy(&l, &r);
+    A(NumberIsBitwiseEqual(l, (N){.l = {15}, .s = 1}) && NumberIsBitwiseEqual(r, (N){.l = {10}, .s = 1}));
+  }
+  {
+    N l = {.l = {5}, .s = 0}, r = {.l = {25}, .s = 2};
+    NumberEquilizeScalesLossy(&l, &r);
+    A(NumberIsBitwiseEqual(l, (N){.l = {500}, .s = 2}) && NumberIsBitwiseEqual(r, (N){.l = {25}, .s = 2}));
+  }
+  {
+    N l = {.l = {10}, .s = 1}, r = {.l = {3}, .s = 0};
+    NumberEquilizeScalesLossy(&l, &r);
+    A(NumberIsBitwiseEqual(l, (N){.l = {1}, .s = 0}) && NumberIsBitwiseEqual(r, (N){.l = {3}, .s = 0}));
+  }
+  {
+    N l = {.l = {200}, .s = 2}, r = {.l = {30}, .s = 1};
+    NumberEquilizeScalesLossy(&l, &r);
+    A(NumberIsBitwiseEqual(l, (N){.l = {2}, .s = 0}) && NumberIsBitwiseEqual(r, (N){.l = {3}, .s = 0}));
+  }
+  {
+    N l = {.l = {1}, .s = 0}, r = {.l = {9999, 9999, 9999, 9999, 9999, 9999, 9999}, .s = 1};
+    NumberEquilizeScalesLossy(&l, &r);
+    A(NumberIsBitwiseEqual(l, (N){.l = {10}, .s = 1}) && NumberIsBitwiseEqual(r, (N){.l = {9999, 9999, 9999, 9999, 9999, 9999, 9999}, .s = 1}));
+  }
+  {
+    N l = {.l = {9999, 9999, 9999, 9999, 9999, 9999, 9999}, .s = 2}, r = {.l = {9999, 9999, 9999, 9999, 9999, 9999, 9999}, .s = 1};
+    NumberEquilizeScalesLossy(&l, &r);
+    A(l.s == 1 && r.s == 1);
+  }
+  {
+    N l = {.l = {1}, .s = 255}, r = {.l = {9999, 9999, 9999, 9999, 9999, 9999, 9999}, .s = 0};
+    NumberEquilizeScalesLossy(&l, &r);
+    A(NumberIsBitwiseEqual(l, (N){.l = {0}, .s = 0}) && NumberIsBitwiseEqual(r, (N){.l = {9999, 9999, 9999, 9999, 9999, 9999, 9999}, .s = 0}));
+  }
+  {
+    N l = {.l = {0}, .s = 1}, r = {.l = {5}, .s = 0};
+    NumberEquilizeScalesLossy(&l, &r);
+    A(NumberIsBitwiseEqual(l, (N){.l = {0}, .s = 0}) && NumberIsBitwiseEqual(r, (N){.l = {5}, .s = 0}));
+  }
+  {
+    N l = {.l = {3}, .s = 0}, r = {.l = {0}, .s = 2};
+    NumberEquilizeScalesLossy(&l, &r);
+    A(NumberIsBitwiseEqual(l, (N){.l = {3}, .s = 0}) && NumberIsBitwiseEqual(r, (N){.l = {0}, .s = 0}));
+  }
+}
+
 static void TestNumberByAddingNumber() {
   // 0 + 0 = 0
   A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {0}, .s = 0, .f = 0}, (N){.l = {0}, .s = 0, .f = 0}), (N){.l = {0}, .s = 0, .f = 0}));
@@ -1503,18 +1700,30 @@ static void TestNumberByAddingNumber() {
   A(NumberIsNAN(NumberByAddingNumber(NumberNAN(), NumberFromU64(5))));
   // 5 + NaN = NaN
   A(NumberIsNAN(NumberByAddingNumber(NumberFromU64(5), NumberNAN())));
-  // 1 * 10^250 + 1 * 10^10 = NaN
-  A(NumberIsNAN(NumberByAddingNumber((N){.l = {1}, .s = 250, .f = 0}, (N){.l = {1}, .s = 10, .f = 0})));
+  // 1 * 10^-250 + 1 * 10^-10 = 1 * 10^-10
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {1}, .s = 250, .f = 0}, (N){.l = {1}, .s = 10, .f = 0}), (N){.l = {1}, .s = 10, .f = 0}));
   // 5000'0000 + -1 = 4999'9999
   A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {0, 5000}, .s = 0, .f = 0}, (N){.l = {1}, .s = 0, .f = NUMBER_FLAG_SIGN}), (N){.l = {9999, 4999}, .s = 0, .f = 0}));
   // 9999'0000'0000'0000'0000'0000'0000 + 1'0000'0000'0000'0000'0000'0000 = NaN
   A(NumberIsNAN(NumberByAddingNumber((N){.l = {0, 0, 0, 0, 0, 0, 9999}, .s = 0, .f = 0}, (N){.l = {0, 0, 0, 0, 0, 0, 1}, .s = 0, .f = 0})));
   // 8999'9999'9999'9999'9999'9999'9999 + 1 = 9000'0000'0000'0000'0000'0000'0000
   A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {9999, 9999, 9999, 9999, 9999, 9999, 8999}}, (N){.l = {1}}), (N){.l = {0, 0, 0, 0, 0, 0, 9000}}));
+  // 9999'9999'9999'9999'9999'9999'9999 + 1 = NaN
+  A(NumberIsNAN(NumberByAddingNumber((N){.l = {9999, 9999, 9999, 9999, 9999, 9999, 9999}}, (N){.l = {1}})));
+  // 9999'9999'9999'9999'9999'9999'9999 + 0.1 = 9999'9999'9999'9999'9999'9999'9999
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {9999, 9999, 9999, 9999, 9999, 9999, 9999}}, (N){.l = {1}, .s = 1}), (N){.l = {9999, 9999, 9999, 9999, 9999, 9999, 9999}}));
+  // 9999'9999'9999'9999'9999'9999'9999 + 0.01 = 9999'9999'9999'9999'9999'9999'9999
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {9999, 9999, 9999, 9999, 9999, 9999, 9999}}, (N){.l = {1}, .s = 2}), (N){.l = {9999, 9999, 9999, 9999, 9999, 9999, 9999}}));
+  // 9999'9999'9999'9999'9999'9999'9999 + -1 * 10^-255 = 9999'9999'9999'9999'9999'9999'9999
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {9999, 9999, 9999, 9999, 9999, 9999, 9999}}, (N){.l = {1}, .s = 255, .f = NUMBER_FLAG_SIGN}),
+                         (N){.l = {9999, 9999, 9999, 9999, 9999, 9999, 9999}}));
   // 10000 + -10000 = 0
   A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {0, 1}, .s = 0, .f = 0}, (N){.l = {0, 1}, .s = 0, .f = NUMBER_FLAG_SIGN}), (N){.l = {0}, .s = 0, .f = 0}));
   // 5 + -5 = 0
   A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {5}, .s = 0, .f = 0}, (N){.l = {5}, .s = 0, .f = NUMBER_FLAG_SIGN}), (N){.l = {0}, .s = 0, .f = 0}));
+  // 3.141592653589793238462643383 + 2.718281828459045235360287471 = 5.859874482048838473822930854
+  A(NumberIsBitwiseEqual(NumberByAddingNumber((N){.l = {3383, 6264, 2384, 9793, 5358, 5926, 3141}, .s = 27}, (N){.l = {7471, 6028, 2353, 9045, 2845, 2818, 2718}, .s = 27}),
+                         (N){.l = {854, 2293, 4738, 8838, 8204, 8744, 5859}, .s = 27}));
 }
 
 static void Test() {
@@ -1522,6 +1731,9 @@ static void Test() {
   TestNumberFromU64();
   TestNumberByNegatingNumber();
   TestNumberByRemovingRedundantScale();
+  TestNumberDigitsInUse();
+  TestNumberByDroppingLeastSignificantDigitLossy();
+  TestNumberEquilizeScalesLossy();
   TestNumberByAddingNumber();
 }
 
