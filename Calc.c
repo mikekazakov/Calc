@@ -115,6 +115,8 @@ static SEL $applicationDidFinishLaunching$;
 static SEL $bottomAnchor;
 static SEL $buttonWithTitle$image$target$action$;
 static SEL $buttonWithTitle$target$action$;
+static SEL $characters;
+static SEL $characterAtIndex$;
 static SEL $centerXAnchor;
 static SEL $centerYAnchor;
 static SEL $configurationWithPointSize$weight$;
@@ -398,6 +400,8 @@ static void RegisterSelectors() {
   REGISTER($bottomAnchor);
   REGISTER($buttonWithTitle$image$target$action$);
   REGISTER($buttonWithTitle$target$action$);
+  REGISTER($characters);
+  REGISTER($characterAtIndex$);
   REGISTER($centerXAnchor);
   REGISTER($centerYAnchor);
   REGISTER($configurationWithPointSize$weight$);
@@ -490,57 +494,48 @@ static void onApplicationDidFinishLaunching(id self, SEL cmd, id notification) {
   MSG(void, g_App, $activateIgnoringOtherApps$, true);
 }
 static void onWindowKeyDown(id self, SEL cmd, id event) {
-  // u16 keyCode = MSG(u16, event, $keyCode);
-  // TODO: switch to char-based selection (?)
-  switch (MSG(u16, event, $keyCode)) {
-    case 0x1D:
-    case 0x52:
-      return MSG(void, g_ButtonZero, $performClick$, (id)0);
-    case 0x12:
-    case 0x53:
-      return MSG(void, g_ButtonOne, $performClick$, (id)0);
-    case 0x13:
-    case 0x54:
-      return MSG(void, g_ButtonTwo, $performClick$, (id)0);
-    case 0x14:
-    case 0x55:
-      return MSG(void, g_ButtonThree, $performClick$, (id)0);
-    case 0x15:
-    case 0x56:
-      return MSG(void, g_ButtonFour, $performClick$, (id)0);
-    case 0x17:
-    case 0x57:
-      return MSG(void, g_ButtonFive, $performClick$, (id)0);
-    case 0x16:
-    case 0x58:
-      return MSG(void, g_ButtonSix, $performClick$, (id)0);
-    case 0x1A:
-    case 0x59:
-      return MSG(void, g_ButtonSeven, $performClick$, (id)0);
-    case 0x1C:
-    case 0x5B:
-      return MSG(void, g_ButtonEight, $performClick$, (id)0);
-    case 0x19:
-    case 0x5C:
-      return MSG(void, g_ButtonNine, $performClick$, (id)0);
-    case 0x33:
-      return MSG(void, g_ButtonDelete, $performClick$, (id)0);
-    case 0x41:
-      return MSG(void, g_ButtonDot, $performClick$, (id)0);
-    case 0x45:
-      return MSG(void, g_ButtonPlus, $performClick$, (id)0);
-    case 0x4E:
-      return MSG(void, g_ButtonMinus, $performClick$, (id)0);
-    case 0x4C:
-    case 0x51:
-      return MSG(void, g_ButtonEq, $performClick$, (id)0);
-    case 0x35:
-    case 0x47:
-      return MSG(void, g_ButtonClear, $performClick$, (id)0);
-    default:
-      struct objc_super super = {.receiver = self, .super_class = NSWindow};
-      ((void (*)(struct objc_super*, SEL, id))objc_msgSendSuper)(&super, $keyDown$, event);
+  id characters = MSG(id, event, $characters);
+  u16 character = 0;
+  if (characters != nullptr && MSG(u64, characters, $length) == 1) {
+    character = MSG(u16, characters, $characterAtIndex$, (u64)0);
   }
+  u16 keycode = MSG(u16, event, $keyCode);
+
+  if (character == '0' || keycode == 0x52)  // kVK_ANSI_Keypad0
+    return MSG(void, g_ButtonZero, $performClick$, (id)0);
+  if (character == '1' || keycode == 0x53)  // kVK_ANSI_Keypad1
+    return MSG(void, g_ButtonOne, $performClick$, (id)0);
+  if (character == '2' || keycode == 0x54)  // kVK_ANSI_Keypad2
+    return MSG(void, g_ButtonTwo, $performClick$, (id)0);
+  if (character == '3' || keycode == 0x55)  // kVK_ANSI_Keypad3
+    return MSG(void, g_ButtonThree, $performClick$, (id)0);
+  if (character == '4' || keycode == 0x56)  // kVK_ANSI_Keypad4
+    return MSG(void, g_ButtonFour, $performClick$, (id)0);
+  if (character == '5' || keycode == 0x57)  // kVK_ANSI_Keypad5
+    return MSG(void, g_ButtonFive, $performClick$, (id)0);
+  if (character == '6' || keycode == 0x58)  // kVK_ANSI_Keypad6
+    return MSG(void, g_ButtonSix, $performClick$, (id)0);
+  if (character == '7' || keycode == 0x59)  // kVK_ANSI_Keypad7
+    return MSG(void, g_ButtonSeven, $performClick$, (id)0);
+  if (character == '8' || keycode == 0x5B)  // kVK_ANSI_Keypad8
+    return MSG(void, g_ButtonEight, $performClick$, (id)0);
+  if (character == '9' || keycode == 0x5C)  // kVK_ANSI_Keypad9
+    return MSG(void, g_ButtonNine, $performClick$, (id)0);
+  if (character == '-' || keycode == 0x4E)  // kVK_ANSI_KeypadMinus
+    return MSG(void, g_ButtonMinus, $performClick$, (id)0);
+  if (character == '+' || keycode == 0x45)  // kVK_ANSI_KeypadPlus
+    return MSG(void, g_ButtonPlus, $performClick$, (id)0);
+  if (character == '.' || keycode == 0x41)  // kVK_ANSI_KeypadDecimal
+    return MSG(void, g_ButtonDot, $performClick$, (id)0);
+  if (character == 0x0D || character == '=' || keycode == 0x4C || keycode == 0x51)  // kVK_ANSI_KeypadEnter, kVK_ANSI_KeypadEquals
+    return MSG(void, g_ButtonEq, $performClick$, (id)0);
+  if (character == 0x1A || keycode == 0x35 || keycode == 0x47)  // kVK_Escape, kVK_ANSI_KeypadClear
+    return MSG(void, g_ButtonClear, $performClick$, (id)0);
+  if (character == 0x7F || keycode == 0x33)  // kVK_Delete
+    return MSG(void, g_ButtonDelete, $performClick$, (id)0);
+
+  struct objc_super super = {.receiver = self, .super_class = NSWindow};
+  ((void (*)(struct objc_super*, SEL, id))objc_msgSendSuper)(&super, $keyDown$, event);
 }
 
 static void feedCmdAndUpdate(enum CalcCommand cmd) {
