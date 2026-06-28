@@ -209,7 +209,7 @@ static constexpr u8 NUMBER_FLAG_NAN = 0x02;             // The number is a NaN, 
 static constexpr u8 NUMBER_FLAG_DOT = 0x04;             // The number should display a decimal point, regardless of the number value.
 typedef struct Number {
   u16 l[NUMBER_LIMBS];  // limbs consisting of 10000-based numbers
-  u8 s;                 // 10-based scale of the number, i.e. real number = stored number x 10^(-scale)
+  u8 s;                 // 10-based negative scale of the number, i.e. real number = stored number x 10^(-scale)
   u8 f;                 // flags of the number, see NUMBER_FLAG_*
 } Number;
 static_assert(sizeof(Number) == 16, "Number shall be 16 bytes long");
@@ -219,7 +219,8 @@ static constexpr u64 MAX_TOKENS = 64;
 enum TokenType {
   TOK_NUM,  // holds a number
   TOK_ADD,  // holds an addition operator
-  TOK_SUB   // holds a subtraction operator
+  TOK_SUB,  // holds a subtraction operator
+  TOK_MUL   // holds a multiplication operator
 };
 struct Token {
   enum TokenType type;
@@ -245,6 +246,7 @@ enum CalcCommand {
   CMD_DOT,
   CMD_PLUS,
   CMD_MINUS,
+  CMD_MULTIPLY,
   CMD_EVAL,
 };
 
@@ -313,6 +315,7 @@ static Number NumberByForcingDot(Number number);
 static Number NumberByExtendingScaleTo(Number number, u8 scale);
 static Number NumberByNegatingNumber(Number number);
 static Number NumberByAddingNumber(Number left, Number right);
+static Number NumberByMultiplyingNumber(Number left, Number right);
 static Number NumberByRemovingRedundantScale(Number number);
 static id NumberToNSString(Number number);
 static u64 NumberOccupiedSymbols(Number number);
@@ -525,6 +528,8 @@ static void onWindowKeyDown(id self, SEL cmd, id event) {
     return MSG(void, g_ButtonMinus, $performClick$, (id)0);
   if (character == '+' || keycode == 0x45)  // kVK_ANSI_KeypadPlus
     return MSG(void, g_ButtonPlus, $performClick$, (id)0);
+  if (character == '*' || keycode == 0x43)  // kVK_ANSI_KeypadMultiply
+    return MSG(void, g_ButtonMultiply, $performClick$, (id)0);
   if (character == '.' || keycode == 0x41)  // kVK_ANSI_KeypadDecimal
     return MSG(void, g_ButtonDot, $performClick$, (id)0);
   if (character == 0x0D || character == '=' || keycode == 0x4C || keycode == 0x51)  // kVK_ANSI_KeypadEnter, kVK_ANSI_KeypadEquals
@@ -589,7 +594,7 @@ static void onButtonNineClicked(id self, SEL cmd, id sender) {
 }
 
 static void onButtonMultiplyClicked(id self, SEL cmd, id sender) {
-  printf("onButtonMultiplyClicked\n");
+  feedCmdAndUpdate(CMD_MULTIPLY);
 }
 
 static void onButtonFourClicked(id self, SEL cmd, id sender) {
@@ -951,6 +956,11 @@ static id CalcVisualize(struct Calculator* calc) {
         str = MSG(id, str, $stringByAppendingString$, tok_str);
         break;
       }
+      case TOK_MUL: {
+        id tok_str = CLASS_MSG(id, NSString, $stringWithUTF8String$, "×");
+        str = MSG(id, str, $stringByAppendingString$, tok_str);
+        break;
+      }
     }
   }
   return str;
@@ -1041,6 +1051,17 @@ static bool CalcProcess(struct Calculator* calc, enum CalcCommand cmd) {
       calc->toks_num++;
       return true;
     }
+    case CMD_MULTIPLY: {
+      if (calc->toks_num == MAX_TOKENS)
+        return false;
+      if (calc->toks[calc->toks_num - 1].type == TOK_MUL)
+        return true;
+      if (calc->toks[calc->toks_num - 1].type != TOK_NUM)
+        return false;
+      calc->toks[calc->toks_num].type = TOK_MUL;
+      calc->toks_num++;
+      return true;
+    }
     case CMD_EVAL: {
       Number result = CalcEval(calc);
       if (NumberIsNAN(result))
@@ -1063,6 +1084,8 @@ static Number CalcEval(struct Calculator* calc) {
       acc = NumberByAddingNumber(acc, calc->toks[i + 1].number);
     else if (calc->toks[i].type == TOK_SUB && calc->toks[i + 1].type == TOK_NUM)
       acc = NumberByAddingNumber(acc, NumberByNegatingNumber(calc->toks[i + 1].number));
+    else if (calc->toks[i].type == TOK_MUL && calc->toks[i + 1].type == TOK_NUM)
+      acc = NumberByMultiplyingNumber(acc, calc->toks[i + 1].number);
     else
       return NumberNAN();
   }
@@ -1462,6 +1485,78 @@ static Number NumberByAddingNumber(Number left, Number right) {
   return left;
 }
 
+Number NumberByMultiplyingNumber(Number left, Number right) {
+  if (NumberIsNAN(left) || NumberIsNAN(right))
+    return NumberNAN();
+
+  // TODO: swap the numbers so that the smaller one is on the right to reduce the number of iterations and precision loss
+
+  Number acc = {0};
+  for (i64 right_limb = NUMBER_LIMBS - 1; right_limb >= 0; --right_limb) {
+    if (right.l[right_limb] == 0)
+      continue;
+
+    // multiply by a single limb
+    u16 new_limbs[NUMBER_LIMBS * 2 + 1] = {0};
+    u32 carry = 0;
+    for (i64 left_limb = 0; left_limb < NUMBER_LIMBS; ++left_limb) {
+      u32 v = (u32)left.l[left_limb] * (u32)right.l[right_limb] + carry;
+      new_limbs[left_limb + right_limb] = (u16)(v % NUMBER_BASE);
+      carry = v / NUMBER_BASE;
+    }
+    new_limbs[NUMBER_LIMBS + right_limb] = (u16)carry;
+    u32 scale = (u32)left.s + (u32)right.s;
+
+    // fit excessive limbs by shifting right and reducing the negative scale, potentially lossy
+    for (i64 new_limb = NUMBER_LIMBS * 2; new_limb >= NUMBER_LIMBS; --new_limb) {
+      while (new_limbs[new_limb] != 0) {
+        if (scale == 0)
+          return NumberNAN();  // overflow
+        u32 carry = new_limbs[0] % 10 < 5 ? 0 : 10;
+        for (u64 i = 0; i <= new_limb; ++i) {
+          u32 v = (u32)new_limbs[i] + carry;
+          new_limbs[i] = (u16)(v % NUMBER_BASE);
+          carry = v / NUMBER_BASE;
+        }
+        for (i64 i = new_limb; i >= 0; --i) {
+          u32 v = (u32)new_limbs[i] + carry * NUMBER_BASE;
+          new_limbs[i] = (u16)(v / 10);
+          carry = v % 10;
+        }
+        --scale;
+      }
+    }
+
+    // lose precision until the scale can be represented
+    while (scale > 255) {
+      u32 carry = new_limbs[0] % 10 < 5 ? 0 : 10;
+      for (u64 i = 0; i < NUMBER_LIMBS; ++i) {
+        u32 v = (u32)new_limbs[i] + carry;
+        new_limbs[i] = (u16)(v % NUMBER_BASE);
+        carry = v / NUMBER_BASE;
+      }
+      for (i64 i = NUMBER_LIMBS - 1; i >= 0; --i) {
+        u32 v = (u32)new_limbs[i] + carry * NUMBER_BASE;
+        new_limbs[i] = (u16)(v / 10);
+        carry = v % 10;
+      }
+      --scale;
+    }
+
+    // construct the temp number and add it to the accumulator
+    Number t = {0};
+    for (u64 i = 0; i < NUMBER_LIMBS; ++i)
+      t.l[i] = new_limbs[i];
+    t.s = (u8)scale;
+    acc = NumberByAddingNumber(acc, t);
+  }
+
+  if ((left.f & NUMBER_FLAG_SIGN) ^ (right.f & NUMBER_FLAG_SIGN))
+    acc.f |= NUMBER_FLAG_SIGN;
+
+  return acc;
+}
+
 #pragma mark Main
 
 int main() {
@@ -1721,6 +1816,48 @@ static void TestNumberByAddingNumber() {
                          (N){.l = {854, 2293, 4738, 8838, 8204, 8744, 5859}, .s = 27}));
 }
 
+static void TestNumberByMultiplyingNumber() {
+  // 0 * 0 = 0
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {0}, .s = 0, .f = 0}, (N){.l = {0}, .s = 0, .f = 0}), (N){.l = {0}, .s = 0, .f = 0}));
+  // 1 * 0 = 0
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {1}, .s = 0, .f = 0}, (N){.l = {0}, .s = 0, .f = 0}), (N){.l = {0}, .s = 0, .f = 0}));
+  // 10 * 0 = 0
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {10}, .s = 0, .f = 0}, (N){.l = {0}, .s = 0, .f = 0}), (N){.l = {0}, .s = 0, .f = 0}));
+  // 100 * 0 = 0
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {100}, .s = 0, .f = 0}, (N){.l = {0}, .s = 0, .f = 0}), (N){.l = {0}, .s = 0, .f = 0}));
+  // 1000 * 0 = 0
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {1000}, .s = 0, .f = 0}, (N){.l = {0}, .s = 0, .f = 0}), (N){.l = {0}, .s = 0, .f = 0}));
+  // 10000 * 0 = 0
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {0, 1}, .s = 0, .f = 0}, (N){.l = {0}, .s = 0, .f = 0}), (N){.l = {0}, .s = 0, .f = 0}));
+  // 1 * 1 = 1
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {1}, .s = 0, .f = 0}, (N){.l = {1}, .s = 0, .f = 0}), (N){.l = {1}, .s = 0, .f = 0}));
+  // 10000 * 1 = 10000
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {0, 1}, .s = 0, .f = 0}, (N){.l = {1}, .s = 0, .f = 0}), (N){.l = {0, 1}, .s = 0, .f = 0}));
+  // 10001 * 1 = 10001
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {1, 1}, .s = 0, .f = 0}, (N){.l = {1}, .s = 0, .f = 0}), (N){.l = {1, 1}, .s = 0, .f = 0}));
+  // 2 * 2 = 4
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {2}, .s = 0, .f = 0}, (N){.l = {2}, .s = 0, .f = 0}), (N){.l = {4}, .s = 0, .f = 0}));
+  // 20002 * 2 = 40004
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {2, 2}, .s = 0, .f = 0}, (N){.l = {2}, .s = 0, .f = 0}), (N){.l = {4, 4}, .s = 0, .f = 0}));
+  // 10 * 0.1 = 1
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {10}, .s = 0, .f = 0}, (N){.l = {1}, .s = 1, .f = 0}), (N){.l = {1}, .s = 0, .f = 0}));
+  // 9999 * 9 = 89991
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {9999}, .s = 0, .f = 0}, (N){.l = {9}, .s = 0, .f = 0}), (N){.l = {9991, 8}, .s = 0, .f = 0}));
+  // 9999 * 91 = 909909
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {9999}, .s = 0, .f = 0}, (N){.l = {91}, .s = 0, .f = 0}), (N){.l = {9909, 90}, .s = 0, .f = 0}));
+  // 9999 * 918 = 9179082
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {9999}, .s = 0, .f = 0}, (N){.l = {918}, .s = 0, .f = 0}), (N){.l = {9082, 917}, .s = 0, .f = 0}));
+  // 9999 * 918.2 = 9181081.8
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {9999}, .s = 0, .f = 0}, (N){.l = {9182}, .s = 1, .f = 0}), (N){.l = {818, 9181}, .s = 1, .f = 0}));
+  // 9999.7 * 918.21 = 9181824.537
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {9997, 9}, .s = 1, .f = 0}, (N){.l = {1821, 9}, .s = 2, .f = 0}), (N){.l = {4537, 8182, 91}, .s = 3, .f = 0}));
+  // 72.57 * 12.78 = 927.4446
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {7257}, .s = 2, .f = 0}, (N){.l = {1278}, .s = 2, .f = 0}), (N){.l = {4446, 927}, .s = 4, .f = 0}));
+  // 3.1415926535897 * 2.7182818284590 = 8.5397342226731715059692723
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {5897, 2653, 4159, 31}, .s = 13, .f = 0}, (N){.l = {4590, 1828, 1828, 27}, .s = 13, .f = 0}),
+                         (N){.l = {2723, 5969, 7150, 6731, 4222, 3973, 85}, .s = 25, .f = 0}));
+}
+
 static void Test() {
   // Number
   TestNumberFromU64();
@@ -1730,6 +1867,7 @@ static void Test() {
   TestNumberByDroppingLeastSignificantDigitLossy();
   TestNumberEquilizeScalesLossy();
   TestNumberByAddingNumber();
+  TestNumberByMultiplyingNumber();
 }
 
 #else
