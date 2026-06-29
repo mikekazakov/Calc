@@ -1551,6 +1551,9 @@ Number NumberByMultiplyingNumber(Number left, Number right) {
     acc = NumberByAddingNumber(acc, t);
   }
 
+  if (NumberIsZero(acc))
+    return acc;
+
   if ((left.f & NUMBER_FLAG_SIGN) ^ (right.f & NUMBER_FLAG_SIGN))
     acc.f |= NUMBER_FLAG_SIGN;
 
@@ -1821,6 +1824,10 @@ static void TestNumberByMultiplyingNumber() {
   A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {0}, .s = 0, .f = 0}, (N){.l = {0}, .s = 0, .f = 0}), (N){.l = {0}, .s = 0, .f = 0}));
   // 1 * 0 = 0
   A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {1}, .s = 0, .f = 0}, (N){.l = {0}, .s = 0, .f = 0}), (N){.l = {0}, .s = 0, .f = 0}));
+  // 0 * 1 = 0
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {0}, .s = 0, .f = 0}, (N){.l = {1}, .s = 0, .f = 0}), (N){.l = {0}, .s = 0, .f = 0}));
+  // -1 * 0 = 0
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {1}, .s = 0, .f = NUMBER_FLAG_SIGN}, (N){.l = {0}, .s = 0, .f = 0}), (N){.l = {0}, .s = 0, .f = 0}));
   // 10 * 0 = 0
   A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {10}, .s = 0, .f = 0}, (N){.l = {0}, .s = 0, .f = 0}), (N){.l = {0}, .s = 0, .f = 0}));
   // 100 * 0 = 0
@@ -1831,6 +1838,12 @@ static void TestNumberByMultiplyingNumber() {
   A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {0, 1}, .s = 0, .f = 0}, (N){.l = {0}, .s = 0, .f = 0}), (N){.l = {0}, .s = 0, .f = 0}));
   // 1 * 1 = 1
   A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {1}, .s = 0, .f = 0}, (N){.l = {1}, .s = 0, .f = 0}), (N){.l = {1}, .s = 0, .f = 0}));
+  // -1 * 1 = -1
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {1}, .s = 0, .f = NUMBER_FLAG_SIGN}, (N){.l = {1}, .s = 0, .f = 0}), (N){.l = {1}, .s = 0, .f = NUMBER_FLAG_SIGN}));
+  // 1 * -1 = -1
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {1}, .s = 0, .f = 0}, (N){.l = {1}, .s = 0, .f = NUMBER_FLAG_SIGN}), (N){.l = {1}, .s = 0, .f = NUMBER_FLAG_SIGN}));
+  // -1 * -1 = 1
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {1}, .s = 0, .f = NUMBER_FLAG_SIGN}, (N){.l = {1}, .s = 0, .f = NUMBER_FLAG_SIGN}), (N){.l = {1}, .s = 0, .f = 0}));
   // 10000 * 1 = 10000
   A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {0, 1}, .s = 0, .f = 0}, (N){.l = {1}, .s = 0, .f = 0}), (N){.l = {0, 1}, .s = 0, .f = 0}));
   // 10001 * 1 = 10001
@@ -1856,6 +1869,36 @@ static void TestNumberByMultiplyingNumber() {
   // 3.1415926535897 * 2.7182818284590 = 8.5397342226731715059692723
   A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {5897, 2653, 4159, 31}, .s = 13, .f = 0}, (N){.l = {4590, 1828, 1828, 27}, .s = 13, .f = 0}),
                          (N){.l = {2723, 5969, 7150, 6731, 4222, 3973, 85}, .s = 25, .f = 0}));
+  // 5000'0000'0000'0000'0000'0000'000.0 * 2 = 1000'0000'0000'0000'0000'0000'0000
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {0, 0, 0, 0, 0, 0, 5000}, .s = 1, .f = 0}, (N){.l = {2}, .s = 0, .f = 0}), (N){.l = {0, 0, 0, 0, 0, 0, 1000}, .s = 0, .f = 0}));
+  // 5000'0000'0000'0000'0000'0000'000.0 * 2.0 = 1000'0000'0000'0000'0000'0000'0000
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {0, 0, 0, 0, 0, 0, 5000}, .s = 1, .f = 0}, (N){.l = {20}, .s = 1, .f = 0}), (N){.l = {0, 0, 0, 0, 0, 0, 1000}, .s = 0, .f = 0}));
+  // 5000'0000'0000'0000'0000'0000'000.0 * 2.00 = 1000'0000'0000'0000'0000'0000'0000
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {0, 0, 0, 0, 0, 0, 5000}, .s = 1, .f = 0}, (N){.l = {200}, .s = 2, .f = 0}), (N){.l = {0, 0, 0, 0, 0, 0, 1000}, .s = 0, .f = 0}));
+  // 5000'0000'0000'0000'0000'0000'000.0 * 2.000 = 1000'0000'0000'0000'0000'0000'0000
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {0, 0, 0, 0, 0, 0, 5000}, .s = 1, .f = 0}, (N){.l = {2000}, .s = 3, .f = 0}), (N){.l = {0, 0, 0, 0, 0, 0, 1000}, .s = 0, .f = 0}));
+  // 5000'0000'0000'0000'0000'0000'000.0 * 2.0000 = 1000'0000'0000'0000'0000'0000'0000
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {0, 0, 0, 0, 0, 0, 5000}, .s = 1, .f = 0}, (N){.l = {0, 2}, .s = 4, .f = 0}), (N){.l = {0, 0, 0, 0, 0, 0, 1000}, .s = 0, .f = 0}));
+  // 5000'0000'0000'0000'0000'0000'0000 * 2 = NaN
+  A(NumberIsNAN(NumberByMultiplyingNumber((N){.l = {0, 0, 0, 0, 0, 0, 5000}, .s = 0, .f = 0}, (N){.l = {2}, .s = 0, .f = 0})));
+  // 1234'5678'9012'3456'7890'1234'5678 * 1 = 1234'5678'9012'3456'7890'1234'5678
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {5678, 1234, 7890, 3456, 9012, 5678, 1234}, .s = 0, .f = 0}, (N){.l = {1}, .s = 0, .f = 0}),
+                         (N){.l = {5678, 1234, 7890, 3456, 9012, 5678, 1234}, .s = 0, .f = 0}));
+  // 1234'5678'9012'3456'7890'1234'567.8 * 1 = 1234'5678'9012'3456'7890'1234'567.8
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {5678, 1234, 7890, 3456, 9012, 5678, 1234}, .s = 1, .f = 0}, (N){.l = {1}, .s = 0, .f = 0}),
+                         (N){.l = {5678, 1234, 7890, 3456, 9012, 5678, 1234}, .s = 1, .f = 0}));
+  // 1234'5678'9012'3456'7890'1234'56.78 * 1 = 1234'5678'9012'3456'7890'1234'56.78
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {5678, 1234, 7890, 3456, 9012, 5678, 1234}, .s = 2, .f = 0}, (N){.l = {1}, .s = 0, .f = 0}),
+                         (N){.l = {5678, 1234, 7890, 3456, 9012, 5678, 1234}, .s = 2, .f = 0}));
+  // 1234'5678'9012'3456'7890'12.34'5678 * 1 = 1234'5678'9012'3456'7890'12.34'5678
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {5678, 1234, 7890, 3456, 9012, 5678, 1234}, .s = 6, .f = 0}, (N){.l = {1}, .s = 0, .f = 0}),
+                         (N){.l = {5678, 1234, 7890, 3456, 9012, 5678, 1234}, .s = 6, .f = 0}));
+  // (1 * 10^-150) * (2 * 10^-150) = 0
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {1}, .s = 150, .f = 0}, (N){.l = {2}, .s = 150, .f = 0}), (N){.l = {0}, .s = 0, .f = 0}));
+  // (10^27 * 10^-150) * (10^27 * 10^-150) = 10^-246
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {0, 0, 0, 0, 0, 0, 1000}, .s = 150}, (N){.l = {0, 0, 0, 0, 0, 0, 1000}, .s = 150}), (N){.l = {1}, .s = 246}));
+  // 6234'5678'9012'3456'7890'1234'567.8 * 2 = 1246'9135'7802'4691'3578'0246'9136
+  A(NumberIsBitwiseEqual(NumberByMultiplyingNumber((N){.l = {5678, 1234, 7890, 3456, 9012, 5678, 6234}, .s = 1}, (N){.l = {2}}), (N){.l = {9136, 246, 3578, 4691, 7802, 9135, 1246}}));
 }
 
 static void Test() {
